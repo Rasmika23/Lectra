@@ -1,0 +1,188 @@
+@import "tailwindcss";
+
+/* Design System Tokens */
+:root {
+  /* Colors - Primary */
+  --color-primary: #1DA1F2;
+  --color-secondary: #105B8E;
+  --color-accent: #00D4FF;
+  
+  /* Colors - Background */
+  --color-bg-main: #F8FAFC;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-sidebar: #F1F5F9;
+  
+  /* Colors - Text */
+  --color-text-primary: #1E293B;
+  --color-text-secondary: #64748B;
+  --color-text-disabled: #94A3B8;
+  
+  /* Colors - Status */
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+  --color-info: #3B82F6;
+  
+  /* Spacing Scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Typography */
+  --font-size-h1: 32px;
+  --font-size-h2: 24px;
+  --font-size-h3: 18px;
+  --font-size-body: 16px;
+  --font-size-small: 14px;
+  --font-size-tiny: 12px;
+}
+
+/* Base Styles */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-main);
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(29, 161, 242, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 90% 80%, rgba(16, 91, 142, 0.03) 0%, transparent 50%);
+  background-attachment: fixed;
+  margin: 0;
+  padding: 0;
+}
+
+/* Typography */
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h3 {
+  font-size: var(--font-size-h3);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Reset */
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Accessibility - Focus Styles */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Screen Reader Only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Custom Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(29, 161, 242, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(29, 161, 242, 0.4);
+  }
+}
+
+/* Smooth Transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}

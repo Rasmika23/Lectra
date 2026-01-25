@@ -1,0 +1,26 @@
+# Application Setup & Database Integration Walkthrough
+
+## Overview
+We successfully ran the React application and connected it to a PostgreSQL database via a new Express backend.
+
+## Architecture
+- **Frontend**: React (Vite) running on `http://localhost:3000`
+- **Backend**: Express (Node.js) running on `http://localhost:5000`
+- **Database**: PostgreSQL (connected via `pg` library)
+
+## Changes Implemented
+
+### 1. Server Setup (`/server`)
+Created a Node.js/Express server to handle database connections.
+- **`index.js`**: Core server file with CORS and JSON support. Includes a `/test-db` endpoint.
+- **`db.js`**: Manages the PostgreSQL connection pool.
+- **`.env`**: Stores database credentials (configured by user).
+
+### 2. Frontend Integration (`src/App.tsx`)
+- Updated `App.tsx` to call the `/test-db` endpoint on startup.
+- Added `sonner` toast notifications to visually confirm the connection status.
+- Fixed TypeScript errors throughout the application to ensure a clean build.
+
+## Verification
+- **Startup**: `npm run dev` (frontend) and `npm start` (backend).
+- **Result**: The application loads, and a green toast notification "Connected to Backend & Database" confirms the full-stack connection.
