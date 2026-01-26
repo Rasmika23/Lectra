@@ -1,15 +1,16 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  BookOpen, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Users,
+  BookOpen,
+  FileText,
   Settings,
   Calendar,
   UserCircle,
   LogOut,
   ClipboardList
 } from 'lucide-react';
+import logo from '../assets/lectra_logo.png';
 
 interface NavItem {
   label: string;
@@ -54,24 +55,21 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
         return [];
     }
   };
-  
+
   const navItems = getNavItems();
-  
+
   return (
     <aside
       className="w-64 bg-gradient-to-b from-[var(--color-bg-surface)] to-[var(--color-bg-sidebar)]/30 border-r border-[#E2E8F0] flex flex-col shadow-lg"
       aria-label="Main navigation"
     >
+
       {/* Logo */}
-      <div className="p-[var(--space-lg)] border-b border-[#E2E8F0] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white">
-        <h1 className="text-[var(--font-size-h2)] font-bold animate-[fadeIn_0.5s_ease-out]">
-          Lectra
-        </h1>
-        <p className="text-[var(--font-size-small)] mt-1 opacity-90">
-          Lecturer Management
-        </p>
+      <div className="p-[var(--space-lg)] border-b border-[#E2E8F0] bg-white text-center">
+        <img src={logo} alt="Lectra" className="h-[4.5rem] w-auto mx-auto animate-[fadeIn_0.5s_ease-out]" />
+
       </div>
-      
+
       {/* Navigation */}
       <nav className="flex-1 p-[var(--space-md)]" aria-label="Sidebar navigation">
         <ul className="space-y-[var(--space-xs)]">
@@ -84,8 +82,8 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
                   className={`
                     w-full flex items-center gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-sm)]
                     rounded-xl text-left transition-all duration-300 group relative overflow-hidden
-                    ${isActive 
-                      ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white shadow-lg transform scale-105' 
+                    ${isActive
+                      ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white shadow-lg transform scale-105'
                       : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-sidebar)] hover:translate-x-1'
                     }
                   `}
@@ -104,7 +102,7 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
           })}
         </ul>
       </nav>
-      
+
       {/* Logout */}
       <div className="p-[var(--space-md)] border-t border-[#E2E8F0]">
         <button

@@ -4,7 +4,8 @@ import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { Card } from '../components/Card';
 import { Mail, Lock, Sparkles } from 'lucide-react';
-import { getUserByEmail } from '../lib/mockData';
+import logo from '../assets/lectra_logo.png';
+
 
 interface LoginPageProps {
   onLogin: (user: any) => void;
@@ -55,14 +56,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <Card className="w-full max-w-md relative z-10 animate-[scaleIn_0.5s_ease-out] backdrop-blur-sm">
         <div className="text-center mb-[var(--space-xl)]">
           <div className="relative inline-block">
-            <h1 className="text-[var(--font-size-h1)] font-bold bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] bg-clip-text text-transparent mb-[var(--space-sm)]">
-              Lectra
-            </h1>
+            <img src={logo} alt="Lectra" className="h-16 w-auto mb-[var(--space-sm)]" />
             <Sparkles className="absolute -top-2 -right-6 w-5 h-5 text-[var(--color-primary)] animate-[spin_3s_linear_infinite]" />
           </div>
-          <p className="text-[var(--color-text-secondary)]">
-            Visiting Lecturers Management System
-          </p>
+
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-[var(--space-lg)]">
@@ -116,18 +113,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </Button>
         </form>
 
-        <div className="mt-[var(--space-xl)] pt-[var(--space-lg)] border-t border-[#E2E8F0]">
-          <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] text-center">
-            Demo credentials available for testing:
-          </p>
-          <div className="mt-[var(--space-md)] space-y-[var(--space-xs)] text-[var(--font-size-small)] text-center">
-            <p><strong>Main Coordinator:</strong> main.coordinator@university.edu</p>
-            <p><strong>Sub Coordinator:</strong> sub.coordinator@university.edu</p>
-            <p><strong>Lecturer:</strong> lecturer1@example.com</p>
-            <p><strong>Staff:</strong> staff@university.edu</p>
-            <p className="text-[var(--color-text-disabled)] mt-[var(--space-sm)]">Password: password123</p>
-          </div>
-        </div>
+
 
         <p className="mt-[var(--space-lg)] text-[var(--font-size-tiny)] text-[var(--color-text-secondary)] text-center">
           By signing in, you agree to our Terms of Service and Privacy Policy
