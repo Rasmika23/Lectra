@@ -18,27 +18,27 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
   const activeLecturers = mockUsers.filter(u => u.role === 'lecturer').length;
   const upcomingSessions = mockSessions.filter(s => s.status === 'scheduled').length;
   const completionRate = Math.round((mockSessions.filter(s => s.status === 'completed').length / mockSessions.length) * 100);
-  
+
   const recentActivity = [
     { action: 'New module created', detail: 'COSC 3301 - Machine Learning', time: '2 hours ago' },
-    { action: 'Lecturer assigned', detail: 'Dr. Emily Chen to COSC 2202', time: '5 hours ago' },
+    { action: 'Lecturer assigned', detail: 'Dr. Emily Chen to INTE 11123', time: '5 hours ago' },
     { action: 'Session completed', detail: 'COSC 2203 - Database Systems', time: '1 day ago' },
     { action: 'User created', detail: 'New lecturer account for Prof. Michael Brown', time: '2 days ago' },
   ];
-  
+
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
       <Sidebar role="main-coordinator" currentPage="main-dashboard" onNavigate={onNavigate} />
-      
+
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header 
-          userName={currentUser.name} 
-          userRole="Main Coordinator" 
-          notificationCount={3} 
+        <Header
+          userName={currentUser.name}
+          userRole="Main Coordinator"
+          notificationCount={3}
           onProfileClick={() => onNavigate('user-profile')}
-          onLogout={onLogout} 
+          onLogout={onLogout}
         />
-        
+
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
             {/* Page Title */}
@@ -50,7 +50,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                 Manage your department's visiting lecturer coordination
               </p>
             </div>
-            
+
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[var(--space-lg)]">
               <Card padding="lg">
@@ -71,7 +71,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   </div>
                 </div>
               </Card>
-              
+
               <Card padding="lg">
                 <div className="flex items-start justify-between">
                   <div>
@@ -90,7 +90,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   </div>
                 </div>
               </Card>
-              
+
               <Card padding="lg">
                 <div className="flex items-start justify-between">
                   <div>
@@ -109,7 +109,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   </div>
                 </div>
               </Card>
-              
+
               <Card padding="lg">
                 <div className="flex items-start justify-between">
                   <div>
@@ -129,7 +129,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                 </div>
               </Card>
             </div>
-            
+
             {/* Quick Actions */}
             <Card>
               <div className="flex items-center justify-between mb-[var(--space-lg)]">
@@ -137,9 +137,17 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   Quick Actions
                 </h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-[var(--space-md)]">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-[var(--space-md)]">
                 <Button
                   variant="primary"
+                  size="lg"
+                  fullWidth
+                  onClick={() => onNavigate('user-management')}
+                >
+                  Manage Users
+                </Button>
+                <Button
+                  variant="secondary"
                   size="lg"
                   fullWidth
                   onClick={() => onNavigate('create-user')}
@@ -164,7 +172,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                 </Button>
               </div>
             </Card>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--space-xl)]">
               {/* Recent Activity */}
               <Card>
@@ -190,7 +198,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   ))}
                 </div>
               </Card>
-              
+
               {/* Modules Needing Attention */}
               <Card>
                 <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">

@@ -20,38 +20,38 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [codeError, setCodeError] = useState('');
-  
+
   const academicYearOptions = [
     { value: '', label: 'Select academic year' },
     { value: '2024/2025', label: '2024/2025' },
     { value: '2025/2026', label: '2025/2026' },
     { value: '2026/2027', label: '2026/2027' },
   ];
-  
+
   const semesterOptions = [
     { value: '', label: 'Select semester' },
     { value: 'Semester 1', label: 'Semester 1' },
     { value: 'Semester 2', label: 'Semester 2' },
   ];
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setCodeError('');
-    
-    // Validate module code format (example: COSC 2202)
-    const codePattern = /^[A-Z]{3,4}\s\d{4}$/;
+
+    // Validate module code format (example: INTE 11123)
+    const codePattern = /^[A-Z]{3,4}\s\d{4,5}$/;
     if (!codePattern.test(moduleCode)) {
-      setCodeError('Module code must be in format: COSC 2202 (3-4 letters, space, 4 digits)');
+      setCodeError('Module code must be in format: INTE 11123 (3-4 letters, space, 4-5 digits)');
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     // Simulate API call
     setTimeout(() => {
       setShowSuccess(true);
       setIsSubmitting(false);
-      
+
       // Reset form after 3 seconds
       setTimeout(() => {
         setModuleName('');
@@ -62,14 +62,14 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
       }, 3000);
     }, 1000);
   };
-  
+
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
       <Sidebar role="main-coordinator" currentPage="create-module" onNavigate={onNavigate} />
-      
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Main Coordinator" />
-        
+
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-3xl mx-auto space-y-[var(--space-xl)]">
             {/* Breadcrumb */}
@@ -80,7 +80,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Dashboard</span>
             </button>
-            
+
             {/* Page Title */}
             <div>
               <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
@@ -90,7 +90,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                 Set up a new academic module for the visiting lecturer program
               </p>
             </div>
-            
+
             {/* Success Message */}
             {showSuccess && (
               <Card className="bg-[#D1FAE5] border-[var(--color-success)]">
@@ -105,7 +105,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                 </div>
               </Card>
             )}
-            
+
             {/* Form */}
             <Card>
               <form onSubmit={handleSubmit} className="space-y-[var(--space-xl)]">
@@ -119,19 +119,19 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                     required
                     fullWidth
                   />
-                  
+
                   <Input
                     label="Module Code"
                     type="text"
-                    placeholder="e.g., COSC 2202"
+                    placeholder="e.g., INTE 11123"
                     value={moduleCode}
                     onChange={(e) => setModuleCode(e.target.value.toUpperCase())}
                     required
                     fullWidth
                     error={codeError}
-                    helperText={!codeError ? "Format: 3-4 letters, space, 4 digits" : undefined}
+                    helperText={!codeError ? "Format: 3-4 letters, space, 4-5 digits" : undefined}
                   />
-                  
+
                   <Select
                     label="Academic Year"
                     options={academicYearOptions}
@@ -140,7 +140,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                     required
                     fullWidth
                   />
-                  
+
                   <Select
                     label="Semester"
                     options={semesterOptions}
@@ -150,7 +150,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                     fullWidth
                   />
                 </div>
-                
+
                 {/* Next Steps Info */}
                 <div className="bg-[var(--color-bg-sidebar)] p-[var(--space-lg)] rounded-lg">
                   <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
@@ -171,7 +171,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                     </li>
                   </ol>
                 </div>
-                
+
                 {/* Actions */}
                 <div className="flex items-center gap-[var(--space-md)] pt-[var(--space-lg)] border-t border-[#E2E8F0]">
                   <Button
@@ -193,7 +193,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
                 </div>
               </form>
             </Card>
-            
+
             {/* Example Modules */}
             <Card>
               <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
@@ -201,7 +201,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-[var(--space-md)] text-[var(--font-size-small)]">
                 <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded">
-                  <code className="font-mono text-[var(--color-primary)]">COSC 2202</code>
+                  <code className="font-mono text-[var(--color-primary)]">INTE 11123</code>
                   <p className="text-[var(--color-text-secondary)] mt-1">Computer Science</p>
                 </div>
                 <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded">

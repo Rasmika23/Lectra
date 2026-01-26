@@ -31,7 +31,8 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
       case 'main-coordinator':
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'main-dashboard' },
-          { label: 'Create User', icon: <Users className="w-5 h-5" />, href: 'create-user' },
+          { label: 'Users', icon: <Users className="w-5 h-5" />, href: 'user-management' },
+          { label: 'Create User', icon: <UserCircle className="w-5 h-5" />, href: 'create-user' },
           { label: 'Create Module', icon: <BookOpen className="w-5 h-5" />, href: 'create-module' },
           { label: 'Reports', icon: <FileText className="w-5 h-5" />, href: 'reports' },
         ];

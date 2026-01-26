@@ -25,15 +25,15 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
   const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  
+
   // Mock session being rescheduled
   const currentSession = {
-    moduleCode: 'COSC 2202',
+    moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     currentDate: 'Wednesday, January 28, 2026',
     currentTime: '10:00',
   };
-  
+
   const durationOptions = [
     { value: '', label: 'Select duration' },
     { value: '1', label: '1 hour' },
@@ -41,81 +41,81 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
     { value: '2', label: '2 hours' },
     { value: '3', label: '3 hours' },
   ];
-  
+
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const timeSlots = [
     '08:00', '09:00', '10:00', '11:00', '12:00',
     '13:00', '14:00', '15:00', '16:00', '17:00'
   ];
-  
+
   const getWeekDates = (weekOffset: number) => {
     const today = new Date('2026-01-28');
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay() + 1 + (weekOffset * 7));
-    
+
     return days.map((day, index) => {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + index);
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
   };
-  
+
   const isSlotAvailable = (day: string, time: string): { available: boolean; reason?: string } => {
     if (!duration) return { available: false, reason: 'Select duration first' };
-    
+
     const durationHours = parseFloat(duration);
     const [hour, minute] = time.split(':').map(Number);
     const endHour = hour + durationHours;
-    
+
     // Check student timetable conflicts
     const studentConflict = mockStudentTimetable.some(slot => {
       if (slot.day !== day) return false;
       const [slotStartHour] = slot.startTime.split(':').map(Number);
       const [slotEndHour] = slot.endTime.split(':').map(Number);
-      
+
       // Check if there's any overlap
       return (hour < slotEndHour && endHour > slotStartHour);
     });
-    
+
     if (studentConflict) {
       return { available: false, reason: 'Student Busy' };
     }
-    
+
     // Check lecturer's existing sessions (simplified)
     const lecturerConflict = mockSessions.some(session => {
       const sessionDay = new Date(session.date).toLocaleDateString('en-US', { weekday: 'long' });
       if (sessionDay !== day) return false;
-      
+
       const [sessionHour] = session.time.split(':').map(Number);
       const sessionEndHour = sessionHour + session.duration;
-      
+
       return (hour < sessionEndHour && endHour > sessionHour);
     });
-    
+
     if (lecturerConflict) {
       return { available: false, reason: 'Lecturer Busy' };
     }
-    
+
     // Check if end time is within working hours
     if (endHour > 18) {
       return { available: false, reason: 'After hours' };
     }
-    
+
     return { available: true };
   };
-  
+
   const getTimeRange = (startTime: string, durationHours: number): string => {
     const [hour, minute] = startTime.split(':').map(Number);
     const endHour = hour + durationHours;
     const endMinute = minute;
-    
+
     const formatTime = (h: number, m: number) => {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     };
-    
+
     return `${startTime} - ${formatTime(endHour, endMinute)}`;
   };
-  
+
   const handleSlotClick = (day: string, time: string) => {
     const slotStatus = isSlotAvailable(day, time);
     if (slotStatus.available) {
@@ -123,23 +123,23 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
       setShowConfirmModal(true);
     }
   };
-  
+
   const handleConfirmReschedule = () => {
     // Handle reschedule submission
     setShowConfirmModal(false);
     alert('Reschedule request submitted successfully!');
     onNavigate('lecturer-portal');
   };
-  
+
   const weekDates = getWeekDates(selectedWeek);
-  
+
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
       <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} />
-      
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Visiting Lecturer" />
-        
+
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
             {/* Breadcrumb */}
@@ -150,7 +150,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
               <ArrowLeft className="w-4 h-4" />
               <span>Back to My Schedule</span>
             </button>
-            
+
             {/* Page Title */}
             <div>
               <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
@@ -160,7 +160,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                 Select a new time slot that works for both you and the students
               </p>
             </div>
-            
+
             {/* Current Session Info */}
             <Card className="bg-[#DBEAFE] border-[var(--color-info)]">
               <div className="flex items-start gap-[var(--space-md)]">
@@ -175,7 +175,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                 </div>
               </div>
             </Card>
-            
+
             {/* Control Panel */}
             <Card>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-lg)]">
@@ -187,7 +187,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                   fullWidth
                   helperText="Select the duration to see available slots"
                 />
-                
+
                 <div>
                   <label className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)] block mb-[var(--space-sm)]">
                     Select Week
@@ -216,7 +216,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                 </div>
               </div>
             </Card>
-            
+
             {/* Instructions */}
             {!duration && (
               <Card className="bg-[#FEF3C7] border-[var(--color-warning)]">
@@ -228,7 +228,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                 </div>
               </Card>
             )}
-            
+
             {/* Calendar Grid */}
             <Card padding="none">
               <div className="overflow-x-auto">
@@ -261,7 +261,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                           const slotStatus = isSlotAvailable(day, time);
                           const isAvailable = slotStatus.available;
                           const reason = slotStatus.reason;
-                          
+
                           return (
                             <td key={`${day}-${time}`} className="p-1">
                               <button
@@ -295,7 +295,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                 </table>
               </div>
             </Card>
-            
+
             {/* Legend */}
             <Card>
               <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
@@ -319,7 +319,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
           </div>
         </main>
       </div>
-      
+
       {/* Confirmation Modal */}
       <Modal
         isOpen={showConfirmModal}
@@ -340,7 +340,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
           <p className="text-[var(--color-text-secondary)]">
             You are requesting to reschedule the following session:
           </p>
-          
+
           <div className="p-[var(--space-lg)] bg-[var(--color-bg-sidebar)] rounded-lg space-y-[var(--space-md)]">
             <div>
               <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">Module</p>
@@ -348,7 +348,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                 {currentSession.moduleCode} - {currentSession.moduleName}
               </p>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-[var(--space-md)]">
               <div>
                 <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">Current Time</p>
@@ -359,7 +359,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
                   {currentSession.currentTime}
                 </p>
               </div>
-              
+
               {selectedSlot && (
                 <div>
                   <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">New Time</p>
@@ -373,7 +373,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
               )}
             </div>
           </div>
-          
+
           <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
             Your request will be sent to the Sub-Coordinator for approval. You will be notified once it's been reviewed.
           </p>

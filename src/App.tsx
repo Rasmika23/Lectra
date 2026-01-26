@@ -13,6 +13,9 @@ import { LecturerProfilePage } from './pages/LecturerProfilePage';
 import { UserProfilePage } from './pages/UserProfilePage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SetupAccountPage } from './pages/SetupAccountPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { UserManagementPage } from './pages/UserManagementPage';
 
 type Page =
   | 'login'
@@ -27,7 +30,10 @@ type Page =
   | 'reschedule'
   | 'lecturer-profile'
   | 'user-profile'
-  | 'reports';
+  | 'reports'
+  | 'forgot-password'
+  | 'reset-password'
+  | 'user-management';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('login');
@@ -37,6 +43,8 @@ export default function App() {
     // Check for setup account URL
     if (window.location.pathname === '/setup-account') {
       setCurrentPage('setup-account');
+    } else if (window.location.pathname === '/reset-password') {
+      setCurrentPage('reset-password');
     }
 
     const checkConnection = async () => {
@@ -91,13 +99,13 @@ export default function App() {
 
   // Render appropriate page
   const renderPage = () => {
-    if (!currentUser && currentPage !== 'login' && currentPage !== 'setup-account') {
-      return <LoginPage onLogin={handleLogin} />;
+    if (!currentUser && currentPage !== 'login' && currentPage !== 'setup-account' && currentPage !== 'reset-password' && currentPage !== 'forgot-password') {
+      return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
     }
 
     switch (currentPage) {
       case 'login':
-        return <LoginPage onLogin={handleLogin} />;
+        return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
 
       case 'main-dashboard':
         return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
@@ -133,16 +141,25 @@ export default function App() {
         return <ReportsPage currentUser={currentUser} onNavigate={handleNavigate} />;
 
       case 'login':
-        return <LoginPage onLogin={handleLogin} />;
+        return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
 
       case 'setup-account':
         return <SetupAccountPage onNavigate={handleNavigate} />;
 
+      case 'forgot-password':
+        return <ForgotPasswordPage onNavigate={handleNavigate} />;
+
+      case 'reset-password':
+        return <ResetPasswordPage onNavigate={handleNavigate} />;
+
       case 'main-dashboard':
         return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
+      case 'user-management':
+        return <UserManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+
       default:
-        return <LoginPage onLogin={handleLogin} />;
+        return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
     }
   };
 

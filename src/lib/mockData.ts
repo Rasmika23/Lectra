@@ -116,7 +116,7 @@ export const mockModules: Module[] = [
   {
     id: '1',
     name: 'Software Architecture',
-    code: 'COSC 2202',
+    code: 'INTE 11123',
     academicYear: '2025/2026',
     semester: 'Semester 1',
     subCoordinator: 'Mr. Rajesh Kumar',
@@ -150,7 +150,7 @@ export const mockSessions: Session[] = [
   {
     id: '1',
     moduleId: '1',
-    moduleCode: 'COSC 2202',
+    moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerId: '3',
     lecturerName: 'Dr. Emily Chen',
@@ -164,7 +164,7 @@ export const mockSessions: Session[] = [
   {
     id: '2',
     moduleId: '1',
-    moduleCode: 'COSC 2202',
+    moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerId: '4',
     lecturerName: 'Prof. Michael Brown',
@@ -194,7 +194,7 @@ export const mockSessions: Session[] = [
   {
     id: '4',
     moduleId: '1',
-    moduleCode: 'COSC 2202',
+    moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerId: '3',
     lecturerName: 'Dr. Emily Chen',
@@ -214,7 +214,7 @@ export const mockRescheduleRequests: RescheduleRequest[] = [
   {
     id: '1',
     sessionId: '1',
-    moduleCode: 'COSC 2202',
+    moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerName: 'Dr. Emily Chen',
     currentDate: '2026-01-28',
