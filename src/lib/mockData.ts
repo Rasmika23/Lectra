@@ -89,7 +89,7 @@ export const mockUsers: User[] = [
   {
     id: '3',
     email: 'lecturer1@example.com',
-    name: 'Dr. Emily Chen',
+    name: 'Dr. Ruwan Wickramarachchi',
     role: 'lecturer',
     phone: '+94 77 345 6789',
     address: '123 Main Street, Colombo',
@@ -97,7 +97,7 @@ export const mockUsers: User[] = [
   {
     id: '4',
     email: 'lecturer2@example.com',
-    name: 'Prof. Michael Brown',
+    name: 'Prof. Janaka Wijayanayake',
     role: 'lecturer',
     phone: '+94 77 456 7890',
     address: '456 Park Avenue, Kandy',
@@ -120,7 +120,7 @@ export const mockModules: Module[] = [
     academicYear: '2025/2026',
     semester: 'Semester 1',
     subCoordinator: 'Mr. Rajesh Kumar',
-    lecturers: ['Dr. Emily Chen', 'Prof. Michael Brown'],
+    lecturers: ['Dr. Ruwan Wickramarachchi', 'Prof. Janaka Wijayanayake'],
     defaultDay: 'Wednesday',
     defaultTime: '10:00',
   },
@@ -131,7 +131,7 @@ export const mockModules: Module[] = [
     academicYear: '2025/2026',
     semester: 'Semester 1',
     subCoordinator: 'Mr. Rajesh Kumar',
-    lecturers: ['Dr. Emily Chen'],
+    lecturers: ['Dr. Ruwan Wickramarachchi'],
     defaultDay: 'Friday',
     defaultTime: '14:00',
   },
@@ -143,6 +143,17 @@ export const mockModules: Module[] = [
     semester: 'Semester 2',
     lecturers: [],
   },
+  {
+    id: '4',
+    name: 'Cloud Computing',
+    code: 'INTE 4405',
+    academicYear: '2025/2026',
+    semester: 'Semester 2',
+    subCoordinator: 'Mr. Rajesh Kumar',
+    lecturers: ['Dr. Ruwan Wickramarachchi'],
+    defaultDay: 'Monday',
+    defaultTime: '08:00',
+  },
 ];
 
 // Mock sessions
@@ -153,8 +164,8 @@ export const mockSessions: Session[] = [
     moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerId: '3',
-    lecturerName: 'Dr. Emily Chen',
-    date: '2026-01-28',
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
+    date: '2026-01-28', // Wednesday
     time: '10:00',
     endTime: '12:00',
     duration: 2,
@@ -167,8 +178,8 @@ export const mockSessions: Session[] = [
     moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerId: '4',
-    lecturerName: 'Prof. Michael Brown',
-    date: '2026-01-29',
+    lecturerName: 'Prof. Janaka Wijayanayake',
+    date: '2026-01-29', // Thursday
     time: '14:00',
     endTime: '16:00',
     duration: 2,
@@ -181,8 +192,8 @@ export const mockSessions: Session[] = [
     moduleCode: 'COSC 2203',
     moduleName: 'Database Systems',
     lecturerId: '3',
-    lecturerName: 'Dr. Emily Chen',
-    date: '2026-01-24',
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
+    date: '2026-01-24', // Past
     time: '14:00',
     endTime: '16:00',
     duration: 2,
@@ -197,8 +208,8 @@ export const mockSessions: Session[] = [
     moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
     lecturerId: '3',
-    lecturerName: 'Dr. Emily Chen',
-    date: '2026-01-21',
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
+    date: '2026-01-21', // Past
     time: '10:00',
     endTime: '12:00',
     duration: 2,
@@ -206,6 +217,49 @@ export const mockSessions: Session[] = [
     status: 'completed',
     attended: true,
     topicsCovered: 'Design Patterns: Singleton, Factory, Observer',
+  },
+  // NEW SESSIONS FOR TESTING
+  {
+    id: '5',
+    moduleId: '4',
+    moduleCode: 'INTE 4405',
+    moduleName: 'Cloud Computing',
+    lecturerId: '3', // Dr. Ruwan
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
+    date: '2026-01-26', // Monday
+    time: '08:00',
+    endTime: '10:00',
+    duration: 2,
+    location: 'Lab 2',
+    status: 'scheduled',
+  },
+  {
+    id: '6',
+    moduleId: '4',
+    moduleCode: 'INTE 4405',
+    moduleName: 'Cloud Computing',
+    lecturerId: '3', // Dr. Ruwan
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
+    date: '2026-02-02', // Next Monday
+    time: '08:00',
+    endTime: '10:00',
+    duration: 2,
+    location: 'Lab 2',
+    status: 'scheduled',
+  },
+  {
+    id: '7',
+    moduleId: '2',
+    moduleCode: 'COSC 2203',
+    moduleName: 'Database Systems',
+    lecturerId: '3', // Dr. Ruwan
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
+    date: '2026-01-30', // Friday
+    time: '14:00',
+    endTime: '16:00',
+    duration: 2,
+    location: 'Room 401',
+    status: 'scheduled',
   },
 ];
 
@@ -216,7 +270,7 @@ export const mockRescheduleRequests: RescheduleRequest[] = [
     sessionId: '1',
     moduleCode: 'INTE 11123',
     moduleName: 'Software Architecture',
-    lecturerName: 'Dr. Emily Chen',
+    lecturerName: 'Dr. Ruwan Wickramarachchi',
     currentDate: '2026-01-28',
     currentTime: '10:00',
     requestedDate: '2026-01-30',
@@ -275,7 +329,9 @@ export const getModuleById = (id: string): Module | undefined => {
 };
 
 export const getSessionsByLecturerId = (lecturerId: string): Session[] => {
-  return mockSessions.filter(s => s.lecturerId === lecturerId);
+  const specificSessions = mockSessions.filter(s => s.lecturerId === lecturerId);
+  // Return specific sessions if found, otherwise return ALL mock sessions for testing "any" lecturer
+  return specificSessions.length > 0 ? specificSessions : mockSessions;
 };
 
 export const getUpcomingSessions = (): Session[] => {

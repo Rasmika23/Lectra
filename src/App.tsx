@@ -6,7 +6,9 @@ import { CreateUserPage } from './pages/CreateUserPage';
 import { CreateModulePage } from './pages/CreateModulePage';
 import { SubCoordinatorDashboard } from './pages/SubCoordinatorDashboard';
 import { ModuleManagementPage } from './pages/ModuleManagementPage';
+import { ModulesPage } from './pages/ModulesPage'; // Imported
 import { LecturerPortal } from './pages/LecturerPortal';
+import { LecturerSessionsPage } from './pages/LecturerSessionsPage';
 import { LectureReschedulePage } from './pages/LectureReschedulePage';
 import { AttendanceRecordingPage } from './pages/AttendanceRecordingPage';
 import { LecturerProfilePage } from './pages/LecturerProfilePage';
@@ -16,6 +18,7 @@ import { SetupAccountPage } from './pages/SetupAccountPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { UserManagementPage } from './pages/UserManagementPage';
+import { Layout } from './components/Layout';
 
 type Page =
   | 'login'
@@ -25,8 +28,10 @@ type Page =
   | 'create-module'
   | 'sub-dashboard'
   | 'module-management'
+  | 'modules' // Added
   | 'attendance'
   | 'lecturer-portal'
+  | 'lecturer-sessions'
   | 'reschedule'
   | 'lecturer-profile'
   | 'user-profile'
@@ -38,13 +43,45 @@ type Page =
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('login');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [navigationState, setNavigationState] = useState<any>(null); // Added for passing data between pages
 
   useEffect(() => {
+    // Check for setup account URL
     // Check for setup account URL
     if (window.location.pathname === '/setup-account') {
       setCurrentPage('setup-account');
     } else if (window.location.pathname === '/reset-password') {
       setCurrentPage('reset-password');
+    } else {
+      // Check for saved session
+      const savedUser = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
+      if (savedUser) {
+        try {
+          const user = JSON.parse(savedUser);
+          setCurrentUser(user);
+          // Restore correct page based on role
+          switch (user.role) {
+            case 'main-coordinator':
+              setCurrentPage('main-dashboard');
+              break;
+            case 'sub-coordinator':
+              setCurrentPage('sub-dashboard');
+              break;
+            case 'lecturer':
+              setCurrentPage('lecturer-portal');
+              break;
+            case 'staff':
+              setCurrentPage('reports');
+              break;
+            default:
+              setCurrentPage('login');
+          }
+        } catch (e) {
+          console.error('Failed to parse saved user', e);
+          localStorage.removeItem('currentUser');
+          sessionStorage.removeItem('currentUser');
+        }
+      }
     }
 
     const checkConnection = async () => {
@@ -64,9 +101,16 @@ export default function App() {
     checkConnection();
   }, []);
 
-  const handleLogin = (user: any) => {
+  const handleLogin = (user: any, remember: boolean) => {
     if (user) {
       setCurrentUser(user);
+
+      // Save session
+      if (remember) {
+        localStorage.setItem('currentUser', JSON.stringify(user));
+      } else {
+        sessionStorage.setItem('currentUser', JSON.stringify(user));
+      }
 
       // Route to appropriate dashboard based on role
       switch (user.role) {
@@ -88,25 +132,41 @@ export default function App() {
     }
   };
 
-  const handleNavigate = (page: string) => {
+  const handleNavigate = (page: string, state?: any) => {
+    setNavigationState(state || null); // Reset state if not provided
     setCurrentPage(page as Page);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setCurrentPage('login');
+    localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('currentUser');
   };
 
-  // Render appropriate page
-  const renderPage = () => {
-    if (!currentUser && currentPage !== 'login' && currentPage !== 'setup-account' && currentPage !== 'reset-password' && currentPage !== 'forgot-password') {
-      return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+  const getRoleDisplay = (role: string) => {
+    switch (role) {
+      case 'main-coordinator':
+        return 'Main Coordinator';
+      case 'sub-coordinator':
+        return 'Sub-Coordinator';
+      case 'staff':
+        return 'Staff';
+      case 'lecturer':
+        return 'Lecturer';
+      default:
+        return role;
     }
+  };
 
+  // Helper to determine if the page is public (no layout needed)
+  const isPublicPage = (page: Page) => {
+    return ['login', 'setup-account', 'forgot-password', 'reset-password'].includes(page);
+  };
+
+  // Render appropriate page content (without layout)
+  const renderPageContent = () => {
     switch (currentPage) {
-      case 'login':
-        return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
-
       case 'main-dashboard':
         return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
@@ -119,6 +179,9 @@ export default function App() {
       case 'sub-dashboard':
         return <SubCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
+      case 'modules': // Added
+        return <ModulesPage currentUser={currentUser} onNavigate={handleNavigate} />;
+
       case 'module-management':
         return <ModuleManagementPage currentUser={currentUser} onNavigate={handleNavigate} />;
 
@@ -128,8 +191,11 @@ export default function App() {
       case 'lecturer-portal':
         return <LecturerPortal currentUser={currentUser} onNavigate={handleNavigate} />;
 
+      case 'lecturer-sessions':
+        return <LecturerSessionsPage currentUser={currentUser} onNavigate={handleNavigate} />;
+
       case 'reschedule':
-        return <LectureReschedulePage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <LectureReschedulePage currentUser={currentUser} onNavigate={handleNavigate} locationState={navigationState} />;
 
       case 'lecturer-profile':
         return <LecturerProfilePage currentUser={currentUser} onNavigate={handleNavigate} />;
@@ -140,32 +206,55 @@ export default function App() {
       case 'reports':
         return <ReportsPage currentUser={currentUser} onNavigate={handleNavigate} />;
 
-      case 'login':
-        return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
-
-      case 'setup-account':
-        return <SetupAccountPage onNavigate={handleNavigate} />;
-
-      case 'forgot-password':
-        return <ForgotPasswordPage onNavigate={handleNavigate} />;
-
-      case 'reset-password':
-        return <ResetPasswordPage onNavigate={handleNavigate} />;
-
-      case 'main-dashboard':
-        return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
-
       case 'user-management':
         return <UserManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       default:
-        return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+        return null;
     }
+  };
+
+  // Main render logic
+  const renderApp = () => {
+    if (!currentUser && !isPublicPage(currentPage)) {
+      return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+    }
+
+    if (isPublicPage(currentPage)) {
+      switch (currentPage) {
+        case 'login':
+          return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+        case 'setup-account':
+          return <SetupAccountPage onNavigate={handleNavigate} />;
+        case 'forgot-password':
+          return <ForgotPasswordPage onNavigate={handleNavigate} />;
+        case 'reset-password':
+          return <ResetPasswordPage onNavigate={handleNavigate} />;
+        default:
+          return <LoginPage onLogin={handleLogin} onNavigate={handleNavigate} />;
+      }
+    }
+
+    // Authenticated pages with Layout
+    return (
+      <Layout
+        role={currentUser.role}
+        currentPage={currentPage}
+        userName={currentUser.name}
+        userRoleDisplay={getRoleDisplay(currentUser.role)}
+        onNavigate={handleNavigate}
+        onLogout={handleLogout}
+        onProfileClick={() => handleNavigate('user-profile')}
+        notificationCount={3} // You might want to make this dynamic later
+      >
+        {renderPageContent()}
+      </Layout>
+    );
   };
 
   return (
     <div className="min-h-screen">
-      {renderPage()}
+      {renderApp()}
       <Toaster />
     </div>
   );

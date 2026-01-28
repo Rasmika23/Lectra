@@ -3,6 +3,22 @@ const cors = require('cors');
 require('dotenv').config();
 const db = require('./db');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'lectra_secret_key_change_this_prod';
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) return res.status(401).json({ error: 'Null token' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+}
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -35,6 +51,23 @@ app.post('/login', async (req, res) => {
 
     if (!match) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Bypass OTP for Main Coordinator
+    if (user.rolename === 'MainCoordinator') {
+      const token = jwt.sign(
+        { id: user.userid, email: user.email, role: 'main-coordinator' },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return res.json({
+        id: user.userid,
+        name: user.name,
+        email: user.email,
+        role: 'main-coordinator',
+        token: token
+      });
     }
 
     // 2. Credentials Valid -> Generate OTP
@@ -111,7 +144,12 @@ app.post('/verify-otp', async (req, res) => {
       id: user.userid,
       name: user.name,
       email: user.email,
-      role: frontendRole
+      role: frontendRole,
+      token: jwt.sign(
+        { id: user.userid, email: user.email, role: frontendRole },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      )
     };
 
     // 4. Delete Used Token (Single Use)
@@ -143,7 +181,7 @@ setInterval(async () => {
 
 const { v4: uuidv4 } = require('uuid');
 
-app.post('/users/invite', async (req, res) => {
+app.post('/users/invite', authenticateToken, async (req, res) => {
   const { email, role } = req.body;
 
   // Map frontend role to DB Role ID
@@ -212,7 +250,7 @@ app.post('/users/setup', async (req, res) => {
 });
 
 // Get All Users Endpoint
-app.get('/users', async (req, res) => {
+app.get('/users', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT u.userid as id, u.name, u.email, r.rolename as role 
@@ -242,8 +280,164 @@ app.get('/users', async (req, res) => {
   }
 });
 
+// Create Module Endpoint
+app.post('/modules', authenticateToken, async (req, res) => {
+  const { name, code, academicYear, semester } = req.body;
+
+  // Parse semester if it comes as "Semester 1" to just "1"
+  const semesterInt = semester.toString().replace(/\D/g, '');
+
+  try {
+    const result = await db.query(
+      `INSERT INTO module (modulename, modulecode, academicyear, semester) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING *`,
+      [name, code, academicYear, semesterInt]
+    );
+
+    res.status(201).json({ message: 'Module created successfully', module: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error creating module' });
+  }
+});
+
+// Get Modules Endpoint
+app.get('/modules', authenticateToken, async (req, res) => {
+  const { subCoordinatorId } = req.query;
+  try {
+    let query = `
+      SELECT m.*, u.name as subcoordinatorname
+      FROM module m
+      LEFT JOIN users u ON m.subcoordinatorid = u.userid
+    `;
+    const params = [];
+
+    if (subCoordinatorId) {
+      query += ` WHERE m.subcoordinatorid = $1`;
+      params.push(subCoordinatorId);
+    }
+
+    query += ` ORDER BY m.moduleid DESC`;
+
+    const result = await db.query(query, params);
+
+    const modules = result.rows.map(row => ({
+      id: row.moduleid,
+      name: row.modulename,
+      code: row.modulecode,
+      academicYear: row.academicyear,
+      semester: `Semester ${row.semester}`, // Formatting for frontend
+      subCoordinatorId: row.subcoordinatorid,
+      subCoordinator: row.subcoordinatorname // Matching mock data structure partially
+    }));
+
+    res.json(modules);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching modules' });
+  }
+});
+
+// Update Module Endpoint
+app.put('/modules/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, code, academicYear, semester, subCoordinatorId } = req.body;
+
+  // Parse semester if it comes as "Semester 1" to just "1"
+  const semesterInt = semester.toString().replace(/\D/g, '');
+
+  const subCoordIdValue = subCoordinatorId === "" ? null : subCoordinatorId;
+
+  try {
+    const result = await db.query(
+      `UPDATE module SET 
+       modulename = $1, 
+       modulecode = $2, 
+       academicyear = $3, 
+       semester = $4, 
+       subcoordinatorid = $5 
+       WHERE moduleid = $6 
+       RETURNING *`,
+      [name, code, academicYear, semesterInt, subCoordIdValue, id]
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ message: 'Module updated successfully', module: result.rows[0] });
+    } else {
+      res.status(404).json({ error: 'Module not found' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error updating module' });
+  }
+});
+
+// Get Module Lecturers Endpoint
+app.get('/modules/:id/lecturers', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const query = `
+      SELECT u.userid as id, u.name, u.email
+      FROM modulelecturer ml
+      JOIN users u ON ml.lecturerid = u.userid
+      WHERE ml.moduleid = $1
+    `;
+    const result = await db.query(query, [id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching module lecturers' });
+  }
+});
+
+// Add Lecturer to Module Endpoint
+app.post('/modules/:id/lecturers', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { lecturerId } = req.body;
+
+  try {
+    // Check if relationship already exists
+    const check = await db.query(
+      'SELECT * FROM modulelecturer WHERE moduleid = $1 AND lecturerid = $2',
+      [id, lecturerId]
+    );
+
+    if (check.rows.length > 0) {
+      return res.status(409).json({ error: 'Lecturer already assigned to this module' });
+    }
+
+    await db.query(
+      'INSERT INTO modulelecturer (moduleid, lecturerid) VALUES ($1, $2)',
+      [id, lecturerId]
+    );
+
+    res.json({ message: 'Lecturer added to module successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error adding lecturer to module' });
+  }
+});
+
+// Remove Lecturer from Module Endpoint
+app.delete('/modules/:id/lecturers/:lecturerId', authenticateToken, async (req, res) => {
+  const { id, lecturerId } = req.params;
+
+  try {
+    await db.query(
+      'DELETE FROM modulelecturer WHERE moduleid = $1 AND lecturerid = $2',
+      [id, lecturerId]
+    );
+
+    res.json({ message: 'Lecturer removed from module successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error removing lecturer from module' });
+  }
+});
+
 // Delete User Endpoint
-app.delete('/users/:id', async (req, res) => {
+app.delete('/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query('DELETE FROM users WHERE userid = $1 RETURNING userid', [id]);

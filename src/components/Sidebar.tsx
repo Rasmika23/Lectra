@@ -31,6 +31,7 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
       case 'main-coordinator':
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'main-dashboard' },
+          { label: 'Modules', icon: <BookOpen className="w-5 h-5" />, href: 'modules' },
           { label: 'Users', icon: <Users className="w-5 h-5" />, href: 'user-management' },
           { label: 'Create User', icon: <UserCircle className="w-5 h-5" />, href: 'create-user' },
           { label: 'Create Module', icon: <BookOpen className="w-5 h-5" />, href: 'create-module' },
@@ -39,13 +40,15 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
       case 'sub-coordinator':
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'sub-dashboard' },
+          { label: 'Modules', icon: <BookOpen className="w-5 h-5" />, href: 'modules' },
           { label: 'Module Management', icon: <Settings className="w-5 h-5" />, href: 'module-management' },
           { label: 'Attendance', icon: <ClipboardList className="w-5 h-5" />, href: 'attendance' },
           { label: 'Reports', icon: <FileText className="w-5 h-5" />, href: 'reports' },
         ];
       case 'lecturer':
         return [
-          { label: 'My Schedule', icon: <Calendar className="w-5 h-5" />, href: 'lecturer-portal' },
+          { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'lecturer-portal' },
+          { label: 'Sessions', icon: <ClipboardList className="w-5 h-5" />, href: 'lecturer-sessions' },
           { label: 'My Profile', icon: <UserCircle className="w-5 h-5" />, href: 'lecturer-profile' },
         ];
       case 'staff':

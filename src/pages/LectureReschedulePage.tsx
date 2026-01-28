@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { Sidebar } from '../components/Sidebar';
-import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
@@ -11,6 +9,7 @@ import { mockStudentTimetable, mockSessions } from '../lib/mockData';
 interface LectureReschedulePageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  locationState?: { sessionId?: string };
 }
 
 interface TimeSlot {
@@ -20,18 +19,32 @@ interface TimeSlot {
   reason?: string;
 }
 
-export function LectureReschedulePage({ currentUser, onNavigate }: LectureReschedulePageProps) {
+export function LectureReschedulePage({ currentUser, onNavigate, locationState }: LectureReschedulePageProps) {
   const [duration, setDuration] = useState('');
   const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // Mock session being rescheduled
+  // Get session from state or fall back to first scheduled session (for testing)
+  const sessionId = locationState?.sessionId;
+  const sessionData = mockSessions.find(s => s.id === sessionId) ||
+    mockSessions.find(s => s.status === 'scheduled');
+
+  if (!sessionData) {
+    return (
+      <div className="max-w-7xl mx-auto p-[var(--space-xl)] text-center">
+        <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-error)]">Session Not Found</h2>
+        <Button onClick={() => onNavigate('lecturer-portal')}>Back to Portal</Button>
+      </div>
+    );
+  }
+
   const currentSession = {
-    moduleCode: 'INTE 11123',
-    moduleName: 'Software Architecture',
-    currentDate: 'Wednesday, January 28, 2026',
-    currentTime: '10:00',
+    moduleCode: sessionData.moduleCode,
+    moduleName: sessionData.moduleName,
+    currentDate: new Date(sessionData.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+    currentTime: sessionData.time,
+    dateObject: new Date(sessionData.date)
   };
 
   const durationOptions = [
@@ -49,7 +62,10 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
   ];
 
   const getWeekDates = (weekOffset: number) => {
-    const today = new Date('2026-01-28');
+    // Start from the beginning of the week of the SESSION's date, or today if not sure
+    // Here we assume we want to reschedule relative to TODAY, but maybe the user wants relative to the session?
+    // Let's stick to "Current real-world week" as base, so 2026-01-28 is "today".
+    const today = new Date(); // Use real today, or fixed date if you want strictly consistent mock behavior
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay() + 1 + (weekOffset * 7));
 
@@ -127,218 +143,208 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
   const handleConfirmReschedule = () => {
     // Handle reschedule submission
     setShowConfirmModal(false);
-    alert('Reschedule request submitted successfully!');
+    alert('Session rescheduled successfully!');
     onNavigate('lecturer-portal');
   };
 
   const weekDates = getWeekDates(selectedWeek);
 
   return (
-    <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} />
+    <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
+      {/* Breadcrumb */}
+      <button
+        onClick={() => onNavigate('lecturer-portal')}
+        className="flex items-center gap-[var(--space-sm)] text-[var(--color-primary)] hover:underline"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to My Schedule</span>
+      </button>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header userName={currentUser.name} userRole="Visiting Lecturer" />
-
-        <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
-          <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
-            {/* Breadcrumb */}
-            <button
-              onClick={() => onNavigate('lecturer-portal')}
-              className="flex items-center gap-[var(--space-sm)] text-[var(--color-primary)] hover:underline"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to My Schedule</span>
-            </button>
-
-            {/* Page Title */}
-            <div>
-              <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                Reschedule Lecture
-              </h1>
-              <p className="text-[var(--color-text-secondary)] mt-[var(--space-sm)]">
-                Select a new time slot that works for both you and the students
-              </p>
-            </div>
-
-            {/* Current Session Info */}
-            <Card className="bg-[#DBEAFE] border-[var(--color-info)]">
-              <div className="flex items-start gap-[var(--space-md)]">
-                <Calendar className="w-6 h-6 text-[var(--color-info)] flex-shrink-0" />
-                <div>
-                  <h3 className="font-bold text-[#1E40AF]">
-                    {currentSession.moduleCode} - {currentSession.moduleName}
-                  </h3>
-                  <p className="text-[var(--font-size-small)] text-[#1E40AF] mt-1">
-                    Currently scheduled: {currentSession.currentDate} at {currentSession.currentTime}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Control Panel */}
-            <Card>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-lg)]">
-                <Select
-                  label="Session Duration"
-                  options={durationOptions}
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  fullWidth
-                  helperText="Select the duration to see available slots"
-                />
-
-                <div>
-                  <label className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)] block mb-[var(--space-sm)]">
-                    Select Week
-                  </label>
-                  <div className="flex items-center gap-[var(--space-md)]">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedWeek(Math.max(0, selectedWeek - 1))}
-                      disabled={selectedWeek === 0}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <span className="flex-1 text-center font-medium">
-                      {selectedWeek === 0 ? 'Current Week' : `Week +${selectedWeek}`}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedWeek(selectedWeek + 1)}
-                      disabled={selectedWeek >= 4}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Instructions */}
-            {!duration && (
-              <Card className="bg-[#FEF3C7] border-[var(--color-warning)]">
-                <div className="flex items-center gap-[var(--space-md)]">
-                  <Clock className="w-6 h-6 text-[var(--color-warning)]" />
-                  <p className="text-[var(--font-size-small)] text-[#92400E]">
-                    Please select a session duration to see available time slots in the calendar below.
-                  </p>
-                </div>
-              </Card>
-            )}
-
-            {/* Calendar Grid */}
-            <Card padding="none">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px]" role="grid" aria-label="Available time slots">
-                  <thead>
-                    <tr className="border-b border-[#E2E8F0]">
-                      <th className="p-[var(--space-md)] text-left font-bold text-[var(--color-text-primary)] bg-[var(--color-bg-sidebar)]">
-                        Time
-                      </th>
-                      {days.map((day, index) => (
-                        <th
-                          key={day}
-                          className="p-[var(--space-md)] text-center font-bold text-[var(--color-text-primary)] bg-[var(--color-bg-sidebar)]"
-                        >
-                          <div>{day}</div>
-                          <div className="text-[var(--font-size-small)] font-normal text-[var(--color-text-secondary)] mt-1">
-                            {weekDates[index]}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {timeSlots.map((time) => (
-                      <tr key={time} className="border-b border-[#E2E8F0] last:border-0">
-                        <td className="p-[var(--space-md)] font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-sidebar)]">
-                          {time}
-                        </td>
-                        {days.map((day) => {
-                          const slotStatus = isSlotAvailable(day, time);
-                          const isAvailable = slotStatus.available;
-                          const reason = slotStatus.reason;
-
-                          return (
-                            <td key={`${day}-${time}`} className="p-1">
-                              <button
-                                onClick={() => handleSlotClick(day, time)}
-                                disabled={!isAvailable}
-                                className={`
-                                  w-full h-16 rounded text-[var(--font-size-small)] font-medium
-                                  transition-all duration-200 flex flex-col items-center justify-center
-                                  ${isAvailable
-                                    ? 'bg-[#D1FAE5] text-[#065F46] hover:bg-[#A7F3D0] cursor-pointer border-2 border-transparent hover:border-[var(--color-success)]'
-                                    : 'bg-[#F1F5F9] text-[var(--color-text-disabled)] cursor-not-allowed'
-                                  }
-                                `}
-                                aria-label={`${day} at ${isAvailable ? getTimeRange(time, parseFloat(duration)) : time}: ${isAvailable ? 'Available' : reason}`}
-                              >
-                                {isAvailable ? (
-                                  <>
-                                    <span className="font-bold">Available</span>
-                                    <span className="text-[11px] mt-1">{getTimeRange(time, parseFloat(duration))}</span>
-                                  </>
-                                ) : (
-                                  <span className="text-[10px] text-center px-1">{reason}</span>
-                                )}
-                              </button>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            {/* Legend */}
-            <Card>
-              <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
-                Legend
-              </h3>
-              <div className="flex flex-wrap gap-[var(--space-lg)]">
-                <div className="flex items-center gap-[var(--space-sm)]">
-                  <div className="w-8 h-8 bg-[#D1FAE5] border-2 border-[var(--color-success)] rounded" aria-hidden="true" />
-                  <span className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
-                    Available for selected duration
-                  </span>
-                </div>
-                <div className="flex items-center gap-[var(--space-sm)]">
-                  <div className="w-8 h-8 bg-[#F1F5F9] rounded" aria-hidden="true" />
-                  <span className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
-                    Student or Lecturer busy
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </main>
+      {/* Page Title */}
+      <div>
+        <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
+          Reschedule Lecture
+        </h1>
+        <p className="text-[var(--color-text-secondary)] mt-[var(--space-sm)]">
+          Select a new time slot that works for both you and the students
+        </p>
       </div>
+
+      {/* Current Session Info */}
+      <Card className="bg-[#DBEAFE] border-[var(--color-info)]">
+        <div className="flex items-start gap-[var(--space-md)]">
+          <Calendar className="w-6 h-6 text-[var(--color-info)] flex-shrink-0" />
+          <div>
+            <h3 className="font-bold text-[#1E40AF]">
+              {currentSession.moduleCode} - {currentSession.moduleName}
+            </h3>
+            <p className="text-[var(--font-size-small)] text-[#1E40AF] mt-1">
+              Currently scheduled: {currentSession.currentDate} at {currentSession.currentTime}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Control Panel */}
+      <Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-lg)]">
+          <Select
+            label="Session Duration"
+            options={durationOptions}
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            fullWidth
+            helperText="Select the duration to see available slots"
+          />
+
+          <div>
+            <label className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)] block mb-[var(--space-sm)]">
+              Select Week
+            </label>
+            <div className="flex items-center gap-[var(--space-md)]">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedWeek(Math.max(0, selectedWeek - 1))}
+                disabled={selectedWeek === 0}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="flex-1 text-center font-medium">
+                {selectedWeek === 0 ? 'Current Week' : `Week +${selectedWeek}`}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedWeek(selectedWeek + 1)}
+                disabled={selectedWeek >= 4}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Instructions */}
+      {!duration && (
+        <Card className="bg-[#FEF3C7] border-[var(--color-warning)]">
+          <div className="flex items-center gap-[var(--space-md)]">
+            <Clock className="w-6 h-6 text-[var(--color-warning)]" />
+            <p className="text-[var(--font-size-small)] text-[#92400E]">
+              Please select a session duration to see available time slots in the calendar below.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Calendar Grid */}
+      <Card padding="none">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px]" role="grid" aria-label="Available time slots">
+            <thead>
+              <tr className="border-b border-[#E2E8F0]">
+                <th className="p-[var(--space-md)] text-left font-bold text-[var(--color-text-primary)] bg-[var(--color-bg-sidebar)]">
+                  Time
+                </th>
+                {days.map((day, index) => (
+                  <th
+                    key={day}
+                    className="p-[var(--space-md)] text-center font-bold text-[var(--color-text-primary)] bg-[var(--color-bg-sidebar)]"
+                  >
+                    <div>{day}</div>
+                    <div className="text-[var(--font-size-small)] font-normal text-[var(--color-text-secondary)] mt-1">
+                      {weekDates[index]}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {timeSlots.map((time) => (
+                <tr key={time} className="border-b border-[#E2E8F0] last:border-0">
+                  <td className="p-[var(--space-md)] font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-sidebar)]">
+                    {time}
+                  </td>
+                  {days.map((day) => {
+                    const slotStatus = isSlotAvailable(day, time);
+                    const isAvailable = slotStatus.available;
+                    const reason = slotStatus.reason;
+
+                    return (
+                      <td key={`${day}-${time}`} className="p-1">
+                        <button
+                          onClick={() => handleSlotClick(day, time)}
+                          disabled={!isAvailable}
+                          className={`
+                            w-full h-16 rounded text-[var(--font-size-small)] font-medium
+                            transition-all duration-200 flex flex-col items-center justify-center
+                            ${isAvailable
+                              ? 'bg-[#D1FAE5] text-[#065F46] hover:bg-[#A7F3D0] cursor-pointer border-2 border-transparent hover:border-[var(--color-success)]'
+                              : 'bg-[#F1F5F9] text-[var(--color-text-disabled)] cursor-not-allowed'
+                            }
+                          `}
+                          aria-label={`${day} at ${isAvailable ? getTimeRange(time, parseFloat(duration)) : time}: ${isAvailable ? 'Available' : reason}`}
+                        >
+                          {isAvailable ? (
+                            <>
+                              <span className="font-bold">Available</span>
+                              <span className="text-[11px] mt-1">{getTimeRange(time, parseFloat(duration))}</span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-center px-1">{reason}</span>
+                          )}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Legend */}
+      <Card>
+        <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
+          Legend
+        </h3>
+        <div className="flex flex-wrap gap-[var(--space-lg)]">
+          <div className="flex items-center gap-[var(--space-sm)]">
+            <div className="w-8 h-8 bg-[#D1FAE5] border-2 border-[var(--color-success)] rounded" aria-hidden="true" />
+            <span className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
+              Available for selected duration
+            </span>
+          </div>
+          <div className="flex items-center gap-[var(--space-sm)]">
+            <div className="w-8 h-8 bg-[#F1F5F9] rounded" aria-hidden="true" />
+            <span className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
+              Student or Lecturer busy
+            </span>
+          </div>
+        </div>
+      </Card>
 
       {/* Confirmation Modal */}
       <Modal
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
-        title="Confirm Reschedule Request"
+        title="Confirm Reschedule"
         footer={
           <>
             <Button variant="ghost" onClick={() => setShowConfirmModal(false)}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleConfirmReschedule}>
-              Submit Request
+              Confirm Reschedule
             </Button>
           </>
         }
       >
         <div className="space-y-[var(--space-lg)]">
           <p className="text-[var(--color-text-secondary)]">
-            You are requesting to reschedule the following session:
+            You are rescheduling the following session:
           </p>
 
           <div className="p-[var(--space-lg)] bg-[var(--color-bg-sidebar)] rounded-lg space-y-[var(--space-md)]">
@@ -375,7 +381,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
           </div>
 
           <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
-            Your request will be sent to the Sub-Coordinator for approval. You will be notified once it's been reviewed.
+            This change will be reflected in the student timetable immediately.
           </p>
         </div>
       </Modal>

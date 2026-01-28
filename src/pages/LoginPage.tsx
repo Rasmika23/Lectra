@@ -8,7 +8,7 @@ import logo from '../assets/lectra_logo.png';
 
 
 interface LoginPageProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: any, remember: boolean) => void;
   onNavigate: (page: string) => void;
 }
 
@@ -47,16 +47,19 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
           // Step 1 Success: OTP Sent
           setOtpSent(true);
           setMessage(data.message);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           // Step 2 Success: Login Complete
-          onLogin(data);
+          onLogin(data, rememberMe);
         }
       } else {
         setError(data.error || 'Authentication failed');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err) {
       console.error(err);
       setError('Connection to server failed');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsLoading(false);
     }
