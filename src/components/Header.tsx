@@ -37,14 +37,14 @@ export function Header({ userName, userRole, notificationCount = 0, onProfileCli
             {userRole}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-[var(--space-lg)]">
           {/* Notifications */}
           <button
             className="relative p-2 rounded-lg hover:bg-[var(--color-bg-sidebar)] transition-all duration-300 hover:scale-105 active:scale-95"
             aria-label={`Notifications${notificationCount > 0 ? `, ${notificationCount} unread` : ''}`}
           >
-            <Bell className={`w-6 h-6 text-[var(--color-text-secondary)] transition-colors ${notificationCount > 0 ? 'animate-[float_2s_ease-in-out_infinite]' : ''}`} />
+            <Bell className="w-6 h-6 text-[var(--color-text-secondary)] transition-colors" />
             {notificationCount > 0 && (
               <span
                 className="absolute top-1 right-1 w-5 h-5 bg-[var(--color-error)] text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-[pulse_2s_ease-in-out_infinite]"
@@ -54,7 +54,7 @@ export function Header({ userName, userRole, notificationCount = 0, onProfileCli
               </span>
             )}
           </button>
-          
+
           {/* User Profile */}
           <div className="relative" ref={dropdownRef}>
             <button
@@ -66,7 +66,7 @@ export function Header({ userName, userRole, notificationCount = 0, onProfileCli
               <UserCircle className="w-8 h-8 text-[var(--color-text-secondary)] transition-colors duration-300 hover:text-[var(--color-primary)]" />
               <ChevronDown className={`w-4 h-4 text-[var(--color-text-secondary)] transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
-            
+
             {isDropdownOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-[var(--color-bg-surface)] border border-[#E2E8F0] rounded-xl shadow-2xl z-50 overflow-hidden animate-[slideInDown_0.2s_ease-out]">
                 <button

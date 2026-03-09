@@ -3,6 +3,22 @@ const cors = require('cors');
 require('dotenv').config();
 const db = require('./db');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'lectra_secret_key_change_this_prod';
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) return res.status(401).json({ error: 'Null token' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+}
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -12,11 +28,12 @@ app.use(express.json());
 
 // Login endpoint
 // Login endpoint
+// Login endpoint (Step 1: Credential Check & OTP Generation)
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Join with roles table to get the role name
+    // 1. Check Credentials
     const query = `
       SELECT u.*, r.rolename 
       FROM users u 
@@ -30,45 +47,141 @@ app.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    // Compare with passwordhash
     const match = await bcrypt.compare(password, user.passwordhash);
 
-    if (match) {
-      // Map DB role name to frontend expected role string
-      // MainCoordinator -> main-coordinator
-      // SubCoordinator -> sub-coordinator
-      // Lecturer -> lecturer
-      // Staff -> staff
-      let frontendRole = 'login';
-      const dbRole = user.rolename;
+    if (!match) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
 
-      if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
-      else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
-      else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
-      else if (dbRole === 'Staff') frontendRole = 'staff';
+    // Bypass OTP for Main Coordinator
+    if (user.rolename === 'MainCoordinator') {
+      const token = jwt.sign(
+        { id: user.userid, email: user.email, role: 'main-coordinator' },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
 
-      const userResponse = {
+      return res.json({
         id: user.userid,
         name: user.name,
         email: user.email,
-        role: frontendRole
-      };
-
-      res.json(userResponse);
-    } else {
-      res.status(401).json({ error: 'Invalid email or password' });
+        role: 'main-coordinator',
+        token: token
+      });
     }
+
+    // 2. Credentials Valid -> Generate OTP
+    // Generate 6 digit code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60000); // 10 minutes from now
+
+    // 3. Store in verification_tokens
+    await db.query(
+      'INSERT INTO verification_tokens (identifier, token, type, expires_at) VALUES ($1, $2, $3, $4)',
+      [email, otp, 'OTP', expiresAt]
+    );
+
+    // 4. Send Email
+    const emailResult = await sendOtpEmail(email, otp);
+
+    // Even if email fails (development), we proceed. 
+    if (!emailResult.success) {
+      console.error("Failed to send OTP email", emailResult.error);
+    } else {
+      console.log(`OTP sent to ${email}: ${otp}`); // Log for dev convenience
+    }
+
+    // 5. Return status to Frontend
+    res.json({
+      status: 'OTP_REQUIRED',
+      email: email,
+      message: 'Credentials verified. Please enter the OTP sent to your email.'
+    });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Invite User Endpoint
-const { v4: uuidv4 } = require('uuid');
-const { sendInviteEmail } = require('./email');
+// Verify OTP Endpoint (Step 2: Key Verification)
+app.post('/verify-otp', async (req, res) => {
+  const { email, otp } = req.body;
 
-app.post('/users/invite', async (req, res) => {
+  try {
+    // 1. Find valid OTP
+    const tokenQuery = `
+      SELECT * FROM verification_tokens 
+      WHERE identifier = $1 
+      AND token = $2 
+      AND type = 'OTP' 
+      AND expires_at > NOW()
+    `;
+    const tokenResult = await db.query(tokenQuery, [email, otp]);
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    // 2. OTP Valid -> Fetch User Details for Login
+    const userQuery = `
+      SELECT u.*, r.rolename 
+      FROM users u 
+      JOIN roles r ON u.roleid = r.roleid 
+      WHERE u.email = $1
+    `;
+    const userResult = await db.query(userQuery, [email]);
+    const user = userResult.rows[0];
+
+    // 3. Map Role
+    let frontendRole = 'staff'; // Default
+    const dbRole = user.rolename;
+    if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
+    else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
+    else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
+
+    const userResponse = {
+      id: user.userid,
+      name: user.name,
+      email: user.email,
+      role: frontendRole,
+      token: jwt.sign(
+        { id: user.userid, email: user.email, role: frontendRole },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      )
+    };
+
+    // 4. Delete Used Token (Single Use)
+    await db.query('DELETE FROM verification_tokens WHERE id = $1', [tokenResult.rows[0].id]);
+
+    // 5. Return User Session
+    res.json(userResponse);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error verifying OTP' });
+  }
+});
+
+// Invite User Endpoint
+// Import OTP email sender
+const { sendInviteEmail, sendPasswordResetEmail, sendOtpEmail } = require('./email');
+
+// --- Scheduled Cleanup Job ---
+// Runs once every 24 hours to clean up expired tokens
+setInterval(async () => {
+  try {
+    const result = await db.query('DELETE FROM verification_tokens WHERE expires_at < NOW()');
+    console.log(`[Cleanup] Deleted ${result.rowCount} expired tokens.`);
+  } catch (err) {
+    console.error('[Cleanup] Failed to delete expired tokens:', err);
+  }
+}, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
+
+const { v4: uuidv4 } = require('uuid');
+
+app.post('/users/invite', authenticateToken, async (req, res) => {
   const { email, role } = req.body;
 
   // Map frontend role to DB Role ID
@@ -129,6 +242,284 @@ app.post('/users/setup', async (req, res) => {
     } else {
       res.status(404).json({ error: 'User not found' });
     }
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get All Users Endpoint
+app.get('/users', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT u.userid as id, u.name, u.email, r.rolename as role 
+      FROM users u 
+      JOIN roles r ON u.roleid = r.roleid
+      ORDER BY u.userid ASC
+    `;
+    const result = await db.query(query);
+
+    // Map DB roles to frontend roles
+    const users = result.rows.map(user => {
+      let frontendRole = 'staff';
+      if (user.role === 'MainCoordinator') frontendRole = 'main-coordinator';
+      else if (user.role === 'SubCoordinator') frontendRole = 'sub-coordinator';
+      else if (user.role === 'Lecturer') frontendRole = 'lecturer';
+
+      return {
+        ...user,
+        role: frontendRole
+      };
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching users' });
+  }
+});
+
+// Create Module Endpoint
+app.post('/modules', authenticateToken, async (req, res) => {
+  const { name, code, academicYear, semester } = req.body;
+
+  // Parse semester if it comes as "Semester 1" to just "1"
+  const semesterInt = semester.toString().replace(/\D/g, '');
+
+  try {
+    const result = await db.query(
+      `INSERT INTO module (modulename, modulecode, academicyear, semester) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING *`,
+      [name, code, academicYear, semesterInt]
+    );
+
+    res.status(201).json({ message: 'Module created successfully', module: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error creating module' });
+  }
+});
+
+// Get Modules Endpoint
+app.get('/modules', authenticateToken, async (req, res) => {
+  const { subCoordinatorId } = req.query;
+  try {
+    let query = `
+      SELECT m.*, u.name as subcoordinatorname
+      FROM module m
+      LEFT JOIN users u ON m.subcoordinatorid = u.userid
+    `;
+    const params = [];
+
+    if (subCoordinatorId) {
+      query += ` WHERE m.subcoordinatorid = $1`;
+      params.push(subCoordinatorId);
+    }
+
+    query += ` ORDER BY m.moduleid DESC`;
+
+    const result = await db.query(query, params);
+
+    const modules = result.rows.map(row => ({
+      id: row.moduleid,
+      name: row.modulename,
+      code: row.modulecode,
+      academicYear: row.academicyear,
+      semester: `Semester ${row.semester}`, // Formatting for frontend
+      subCoordinatorId: row.subcoordinatorid,
+      subCoordinator: row.subcoordinatorname // Matching mock data structure partially
+    }));
+
+    res.json(modules);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching modules' });
+  }
+});
+
+// Update Module Endpoint
+app.put('/modules/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, code, academicYear, semester, subCoordinatorId } = req.body;
+
+  // Parse semester if it comes as "Semester 1" to just "1"
+  const semesterInt = semester.toString().replace(/\D/g, '');
+
+  const subCoordIdValue = subCoordinatorId === "" ? null : subCoordinatorId;
+
+  try {
+    const result = await db.query(
+      `UPDATE module SET 
+       modulename = $1, 
+       modulecode = $2, 
+       academicyear = $3, 
+       semester = $4, 
+       subcoordinatorid = $5 
+       WHERE moduleid = $6 
+       RETURNING *`,
+      [name, code, academicYear, semesterInt, subCoordIdValue, id]
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ message: 'Module updated successfully', module: result.rows[0] });
+    } else {
+      res.status(404).json({ error: 'Module not found' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error updating module' });
+  }
+});
+
+// Get Module Lecturers Endpoint
+app.get('/modules/:id/lecturers', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const query = `
+      SELECT u.userid as id, u.name, u.email
+      FROM modulelecturer ml
+      JOIN users u ON ml.lecturerid = u.userid
+      WHERE ml.moduleid = $1
+    `;
+    const result = await db.query(query, [id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching module lecturers' });
+  }
+});
+
+// Add Lecturer to Module Endpoint
+app.post('/modules/:id/lecturers', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { lecturerId } = req.body;
+
+  try {
+    // Check if relationship already exists
+    const check = await db.query(
+      'SELECT * FROM modulelecturer WHERE moduleid = $1 AND lecturerid = $2',
+      [id, lecturerId]
+    );
+
+    if (check.rows.length > 0) {
+      return res.status(409).json({ error: 'Lecturer already assigned to this module' });
+    }
+
+    await db.query(
+      'INSERT INTO modulelecturer (moduleid, lecturerid) VALUES ($1, $2)',
+      [id, lecturerId]
+    );
+
+    res.json({ message: 'Lecturer added to module successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error adding lecturer to module' });
+  }
+});
+
+// Remove Lecturer from Module Endpoint
+app.delete('/modules/:id/lecturers/:lecturerId', authenticateToken, async (req, res) => {
+  const { id, lecturerId } = req.params;
+
+  try {
+    await db.query(
+      'DELETE FROM modulelecturer WHERE moduleid = $1 AND lecturerid = $2',
+      [id, lecturerId]
+    );
+
+    res.json({ message: 'Lecturer removed from module successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error removing lecturer from module' });
+  }
+});
+
+// Delete User Endpoint
+app.delete('/users/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query('DELETE FROM users WHERE userid = $1 RETURNING userid', [id]);
+
+    if (result.rows.length > 0) {
+      res.json({ message: 'User deleted successfully' });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error deleting user' });
+  }
+});
+
+// Forgot Password Endpoint
+app.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    // Check if user exists
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) {
+      // Return 200 even if user doesn't exist to prevent enumeration
+      return res.json({ message: 'If an account with that email exists, we have sent a reset link.' });
+    }
+
+    // Generate token
+    const token = uuidv4();
+    const expires = new Date(Date.now() + 3600000); // 1 hour
+
+    // Store in verification_tokens
+    await db.query(
+      'INSERT INTO verification_tokens (identifier, token, type, expires_at) VALUES ($1, $2, $3, $4)',
+      [email, token, 'RESET_PASSWORD', expires]
+    );
+
+    // Send email
+    const resetLink = `http://localhost:3000/reset-password?token=${token}`;
+    await sendPasswordResetEmail(email, resetLink);
+
+    res.json({ message: 'If an account with that email exists, we have sent a reset link.' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset Password Endpoint
+app.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+
+  try {
+    // Find valid token in verification_tokens
+    const tokenQuery = `
+      SELECT * FROM verification_tokens 
+      WHERE token = $1 
+      AND type = 'RESET_PASSWORD' 
+      AND expires_at > NOW()
+    `;
+    const tokenResult = await db.query(tokenQuery, [token]);
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Password reset token is invalid or has expired.' });
+    }
+
+    const email = tokenResult.rows[0].identifier;
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Update user password
+    await db.query(
+      'UPDATE users SET passwordhash = $1 WHERE email = $2',
+      [hashedPassword, email]
+    );
+
+    // Delete used token
+    await db.query('DELETE FROM verification_tokens WHERE id = $1', [tokenResult.rows[0].id]);
+
+    res.json({ message: 'Password has been reset successfully.' });
 
   } catch (err) {
     console.error(err);

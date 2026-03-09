@@ -1,15 +1,16 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  BookOpen, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Users,
+  BookOpen,
+  FileText,
   Settings,
   Calendar,
   UserCircle,
   LogOut,
   ClipboardList
 } from 'lucide-react';
+import logo from '../assets/lectra_logo.png';
 
 interface NavItem {
   label: string;
@@ -30,20 +31,24 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
       case 'main-coordinator':
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'main-dashboard' },
-          { label: 'Create User', icon: <Users className="w-5 h-5" />, href: 'create-user' },
+          { label: 'Modules', icon: <BookOpen className="w-5 h-5" />, href: 'modules' },
+          { label: 'Users', icon: <Users className="w-5 h-5" />, href: 'user-management' },
+          { label: 'Create User', icon: <UserCircle className="w-5 h-5" />, href: 'create-user' },
           { label: 'Create Module', icon: <BookOpen className="w-5 h-5" />, href: 'create-module' },
           { label: 'Reports', icon: <FileText className="w-5 h-5" />, href: 'reports' },
         ];
       case 'sub-coordinator':
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'sub-dashboard' },
+          { label: 'Modules', icon: <BookOpen className="w-5 h-5" />, href: 'modules' },
           { label: 'Module Management', icon: <Settings className="w-5 h-5" />, href: 'module-management' },
           { label: 'Attendance', icon: <ClipboardList className="w-5 h-5" />, href: 'attendance' },
           { label: 'Reports', icon: <FileText className="w-5 h-5" />, href: 'reports' },
         ];
       case 'lecturer':
         return [
-          { label: 'My Schedule', icon: <Calendar className="w-5 h-5" />, href: 'lecturer-portal' },
+          { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'lecturer-portal' },
+          { label: 'Sessions', icon: <ClipboardList className="w-5 h-5" />, href: 'lecturer-sessions' },
           { label: 'My Profile', icon: <UserCircle className="w-5 h-5" />, href: 'lecturer-profile' },
         ];
       case 'staff':
@@ -54,24 +59,21 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
         return [];
     }
   };
-  
+
   const navItems = getNavItems();
-  
+
   return (
     <aside
       className="w-64 bg-gradient-to-b from-[var(--color-bg-surface)] to-[var(--color-bg-sidebar)]/30 border-r border-[#E2E8F0] flex flex-col shadow-lg"
       aria-label="Main navigation"
     >
+
       {/* Logo */}
-      <div className="p-[var(--space-lg)] border-b border-[#E2E8F0] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white">
-        <h1 className="text-[var(--font-size-h2)] font-bold animate-[fadeIn_0.5s_ease-out]">
-          Lectra
-        </h1>
-        <p className="text-[var(--font-size-small)] mt-1 opacity-90">
-          Lecturer Management
-        </p>
+      <div className="p-[var(--space-lg)] border-b border-[#E2E8F0] bg-white text-center">
+        <img src={logo} alt="Lectra" className="h-[4.5rem] w-auto mx-auto animate-[fadeIn_0.5s_ease-out]" />
+
       </div>
-      
+
       {/* Navigation */}
       <nav className="flex-1 p-[var(--space-md)]" aria-label="Sidebar navigation">
         <ul className="space-y-[var(--space-xs)]">
@@ -84,8 +86,8 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
                   className={`
                     w-full flex items-center gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-sm)]
                     rounded-xl text-left transition-all duration-300 group relative overflow-hidden
-                    ${isActive 
-                      ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white shadow-lg transform scale-105' 
+                    ${isActive
+                      ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white shadow-lg transform scale-105'
                       : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-sidebar)] hover:translate-x-1'
                     }
                   `}
@@ -104,7 +106,7 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
           })}
         </ul>
       </nav>
-      
+
       {/* Logout */}
       <div className="p-[var(--space-md)] border-t border-[#E2E8F0]">
         <button

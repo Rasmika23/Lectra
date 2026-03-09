@@ -3,6 +3,7 @@ import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { User, Lock, Sparkles, CheckCircle } from 'lucide-react';
+import logo from '../assets/lectra_logo.png';
 
 interface SetupAccountPageProps {
     onNavigate: (page: string) => void;
@@ -105,8 +106,8 @@ export function SetupAccountPage({ onNavigate }: SetupAccountPageProps) {
             <Card className="w-full max-w-md relative z-10 animate-[scaleIn_0.5s_ease-out] backdrop-blur-sm">
                 <div className="text-center mb-[var(--space-xl)]">
                     <div className="relative inline-block">
-                        <h1 className="text-[var(--font-size-h1)] font-bold bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] bg-clip-text text-transparent mb-[var(--space-sm)]">
-                            Welcome to Lectra
+                        <h1 className="flex items-center justify-center mb-[var(--space-sm)]">
+                            <img src={logo} alt="Lectra" className="h-16 w-auto" />
                         </h1>
                         <Sparkles className="absolute -top-2 -right-6 w-5 h-5 text-[var(--color-primary)] animate-[spin_3s_linear_infinite]" />
                     </div>

@@ -8,7 +8,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   icon?: React.ReactNode;
 }
 
-export function Input({
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   label,
   error,
   helperText,
@@ -18,11 +18,11 @@ export function Input({
   id,
   required,
   ...props
-}: InputProps) {
+}, ref) => {
   const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
   const errorId = error ? `${inputId}-error` : undefined;
   const helperId = helperText ? `${inputId}-helper` : undefined;
-  
+
   return (
     <div className={`flex flex-col gap-[var(--space-sm)] ${fullWidth ? 'w-full' : ''}`}>
       {label && (
@@ -41,6 +41,7 @@ export function Input({
           </div>
         )}
         <input
+          ref={ref}
           id={inputId}
           className={`
             ${icon ? 'pl-10' : 'pl-[var(--space-md)]'}
@@ -49,8 +50,8 @@ export function Input({
             text-[var(--font-size-body)]
             transition-all duration-300
             w-full
-            ${error 
-              ? 'border-[var(--color-error)] focus:border-[var(--color-error)] focus:ring-2 focus:ring-[var(--color-error)] focus:ring-opacity-20' 
+            ${error
+              ? 'border-[var(--color-error)] focus:border-[var(--color-error)] focus:ring-2 focus:ring-[var(--color-error)] focus:ring-opacity-20'
               : 'border-[#CBD5E1] focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)] focus:ring-opacity-10 hover:border-[var(--color-primary)]/50'
             }
             disabled:bg-[var(--color-bg-sidebar)] disabled:cursor-not-allowed
@@ -74,4 +75,6 @@ export function Input({
       )}
     </div>
   );
-}
+});
+
+Input.displayName = 'Input';
