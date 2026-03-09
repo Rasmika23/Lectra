@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
@@ -12,24 +13,46 @@ interface LoginPageProps {
   onNavigate: (page: string) => void;
 }
 
-export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('');
+interface LoginFormInputs {
+  email: string;
+  password?: string;
+  otp?: string;
+  rememberMe: boolean;
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
+export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
+  const [otpSent, setOtpSent] = useState(false);
+  const [serverError, setServerError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+    resetField
+  } = useForm<LoginFormInputs>({
+    defaultValues: {
+      email: '',
+      password: '',
+      otp: '',
+      rememberMe: false
+    }
+  });
+
+  const email = watch('email');
+
+  const onSubmit = async (data: LoginFormInputs) => {
+    setServerError('');
+    setSuccessMessage('');
     setIsLoading(true);
 
     const endpoint = otpSent ? 'http://localhost:5000/verify-otp' : 'http://localhost:5000/login';
-    const body = otpSent ? { email, otp } : { email, password };
+    const body = otpSent
+      ? { email: data.email, otp: data.otp }
+      : { email: data.email, password: data.password };
 
     try {
       const response = await fetch(endpoint, {
@@ -40,25 +63,30 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
         body: JSON.stringify(body),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
       if (response.ok) {
-        if (!otpSent && data.status === 'OTP_REQUIRED') {
+        if (!otpSent && result.status === 'OTP_REQUIRED') {
           // Step 1 Success: OTP Sent
           setOtpSent(true);
-          setMessage(data.message);
+          setSuccessMessage(result.message);
+
+          // Clear password validation as we switch modes
+          // but we keep the email value
+          setValue('otp', '');
+
           window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           // Step 2 Success: Login Complete
-          onLogin(data, rememberMe);
+          onLogin(result, data.rememberMe);
         }
       } else {
-        setError(data.error || 'Authentication failed');
+        setServerError(result.error || 'Authentication failed');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err) {
       console.error(err);
-      setError('Connection to server failed');
+      setServerError('Connection to server failed');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsLoading(false);
@@ -67,9 +95,9 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
 
   const handleBack = () => {
     setOtpSent(false);
-    setOtp('');
-    setError('');
-    setMessage('');
+    setValue('otp', '');
+    setServerError('');
+    setSuccessMessage('');
   };
 
   return (
@@ -87,18 +115,18 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
         </div>
 
         {/* Status Messages */}
-        {message && (
+        {successMessage && (
           <div className="mb-4 p-3 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200">
-            {message}
+            {successMessage}
           </div>
         )}
-        {error && (
+        {serverError && (
           <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200">
-            {error}
+            {serverError}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-[var(--space-lg)]">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-[var(--space-lg)]">
           {!otpSent ? (
             // Step 1: Email & Password
             <>
@@ -106,31 +134,36 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
                 label="Email Address"
                 type="email"
                 placeholder="your.email@university.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                fullWidth
                 autoComplete="email"
                 icon={<Mail />}
+                {...register("email", {
+                  required: "Email is required",
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Invalid email address"
+                  }
+                })}
+                error={errors.email?.message}
+                fullWidth
               />
 
               <Input
                 label="Password"
                 type="password"
                 placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                fullWidth
                 autoComplete="current-password"
                 icon={<Lock />}
+                {...register("password", {
+                  required: "Password is required"
+                })}
+                error={errors.password?.message}
+                fullWidth
               />
 
               <div className="flex items-center justify-between">
                 <Checkbox
                   label="Remember me"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  {...register("rememberMe")}
                 />
                 <button
                   type="button"
@@ -151,17 +184,42 @@ export function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
               >
                 <ArrowLeft size={16} /> Back
               </button>
+
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-1">Verifying as:</p>
+                <p className="font-medium text-gray-900">{email}</p>
+              </div>
+
               <Input
                 label="One-Time Password (OTP)"
                 type="text"
                 placeholder="Enter 6-digit code"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                required
-                fullWidth
                 autoFocus
                 icon={<KeyRound />}
                 helperText="Check your email for the verification code"
+                {...register("otp", {
+                  required: "OTP is required",
+                  minLength: {
+                    value: 6,
+                    message: "OTP must be exactly 6 digits"
+                  },
+                  maxLength: {
+                    value: 6,
+                    message: "OTP must be exactly 6 digits"
+                  },
+                  pattern: {
+                    value: /^[0-9]+$/,
+                    message: "OTP must contain only numbers"
+                  }
+                })}
+                error={errors.otp?.message}
+                fullWidth
+                // Enforce numeric input
+                onInput={(e) => {
+                  const target = e.target as HTMLInputElement;
+                  target.value = target.value.replace(/\D/g, '').slice(0, 6);
+                  setValue('otp', target.value);
+                }}
               />
             </div>
           )}

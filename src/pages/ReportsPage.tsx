@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -12,13 +13,37 @@ interface ReportsPageProps {
   onNavigate: (page: string) => void;
 }
 
+interface ReportFormInputs {
+  reportType: string;
+  selectedModule: string;
+  startDate: string;
+  endDate: string;
+  format: string;
+}
+
 export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
-  const [reportType, setReportType] = useState('');
-  const [selectedModule, setSelectedModule] = useState('all');
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-31');
-  const [format, setFormat] = useState('pdf');
   const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<ReportFormInputs | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+    trigger
+  } = useForm<ReportFormInputs>({
+    defaultValues: {
+      reportType: '',
+      selectedModule: 'all',
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+      format: 'pdf',
+    },
+    mode: 'onChange' // Validate on change for immediate feedback
+  });
+
+  const watchAllFields = watch();
+  const startDate = watch('startDate');
 
   const reportTypeOptions = [
     { value: '', label: 'Select report type' },
@@ -42,12 +67,16 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
     { value: 'csv', label: 'CSV File' },
   ];
 
-  const handleGeneratePreview = () => {
+  const handleGeneratePreview = (data: ReportFormInputs) => {
+    setPreviewData(data);
     setShowPreview(true);
   };
 
-  const handleDownload = () => {
-    alert(`Downloading ${reportType} report as ${format.toUpperCase()}...`);
+  const handleDownload = async () => {
+    const isValid = await trigger();
+    if (isValid) {
+      alert(`Downloading ${watchAllFields.reportType} report as ${watchAllFields.format.toUpperCase()}...`);
+    }
   };
 
   // Calculate statistics
@@ -129,7 +158,7 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--space-xl)]">
         {/* Report Configuration */}
-        <div className="lg:col-span-1 space-y-[var(--space-xl)]">
+        <form className="lg:col-span-1 space-y-[var(--space-xl)]" onSubmit={handleSubmit(handleGeneratePreview)}>
           <Card>
             <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
               Report Configuration
@@ -139,61 +168,71 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
               <Select
                 label="Report Type"
                 options={reportTypeOptions}
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
                 fullWidth
-                required
+                {...register("reportType", { required: "Please select a report type" })}
+                error={errors.reportType?.message}
               />
 
               <Select
                 label="Module"
                 options={moduleOptions}
-                value={selectedModule}
-                onChange={(e) => setSelectedModule(e.target.value)}
                 fullWidth
+                {...register("selectedModule")}
               />
 
               <Input
                 label="Start Date"
                 type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
                 fullWidth
+                {...register("startDate", {
+                  required: "Start date is required",
+                  validate: (value) => {
+                    const selected = new Date(value);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Reset time for accurate comparison
+                    return selected <= today || "Start date cannot be in the future";
+                  }
+                })}
+                error={errors.startDate?.message}
               />
 
               <Input
                 label="End Date"
                 type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
                 fullWidth
+                {...register("endDate", {
+                  required: "End date is required",
+                  validate: (value) => {
+                    if (!startDate) return true;
+                    return new Date(value) >= new Date(startDate) || "End date must be after start date";
+                  }
+                })}
+                error={errors.endDate?.message}
               />
 
               <Select
                 label="Export Format"
                 options={formatOptions}
-                value={format}
-                onChange={(e) => setFormat(e.target.value)}
                 fullWidth
+                {...register("format")}
               />
             </div>
 
             <div className="mt-[var(--space-xl)] space-y-[var(--space-md)]">
               <Button
+                type="submit"
                 variant="primary"
                 size="lg"
                 fullWidth
-                onClick={handleGeneratePreview}
-                disabled={!reportType}
               >
                 Generate Preview
               </Button>
               <Button
+                type="button"
                 variant="secondary"
                 size="lg"
                 fullWidth
                 onClick={handleDownload}
-                disabled={!reportType}
               >
                 <Download className="w-4 h-4 mr-2" />
                 Download Report
@@ -233,7 +272,7 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
               </div>
             </div>
           </Card>
-        </div>
+        </form>
 
         {/* Report Preview */}
         <div className="lg:col-span-2">
@@ -242,29 +281,29 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
               <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
                 Report Preview
               </h2>
-              {showPreview && reportType && (
+              {showPreview && previewData && (
                 <StatusBadge status="info">
-                  {reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report
+                  {previewData.reportType.charAt(0).toUpperCase() + previewData.reportType.slice(1)} Report
                 </StatusBadge>
               )}
             </div>
 
-            {showPreview && reportType ? (
+            {showPreview && previewData ? (
               <div className="space-y-[var(--space-lg)]">
                 {/* Report Header */}
                 <div className="p-[var(--space-lg)] bg-[var(--color-bg-sidebar)] rounded-lg">
                   <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-sm)]">
-                    {reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report
+                    {previewData.reportType.charAt(0).toUpperCase() + previewData.reportType.slice(1)} Report
                   </h3>
                   <div className="grid grid-cols-2 gap-[var(--space-md)] text-[var(--font-size-small)]">
                     <div>
                       <span className="text-[var(--color-text-secondary)]">Period:</span>
-                      <span className="ml-2 font-medium">{startDate} to {endDate}</span>
+                      <span className="ml-2 font-medium">{previewData.startDate} to {previewData.endDate}</span>
                     </div>
                     <div>
                       <span className="text-[var(--color-text-secondary)]">Module:</span>
                       <span className="ml-2 font-medium">
-                        {selectedModule === 'all' ? 'All Modules' : mockModules.find(m => m.id === selectedModule)?.code}
+                        {previewData.selectedModule === 'all' ? 'All Modules' : mockModules.find(m => m.id === previewData.selectedModule)?.code}
                       </span>
                     </div>
                   </div>
@@ -284,12 +323,12 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
                         <th className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
                           Lecturer
                         </th>
-                        {reportType === 'attendance' && (
+                        {previewData.reportType === 'attendance' && (
                           <th className="text-center py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
                             Status
                           </th>
                         )}
-                        {reportType === 'topics' && (
+                        {previewData.reportType === 'topics' && (
                           <th className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
                             Topics Covered
                           </th>
@@ -311,7 +350,7 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
                             <td className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
                               {session.lecturerName}
                             </td>
-                            {reportType === 'attendance' && (
+                            {previewData.reportType === 'attendance' && (
                               <td className="py-[var(--space-md)] px-[var(--space-sm)] text-center">
                                 {session.attended ? (
                                   <StatusBadge status="success">Present</StatusBadge>
@@ -320,7 +359,7 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
                                 )}
                               </td>
                             )}
-                            {reportType === 'topics' && (
+                            {previewData.reportType === 'topics' && (
                               <td className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
                                 {session.topicsCovered || 'Not recorded'}
                               </td>

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -11,21 +14,39 @@ interface LecturerProfilePageProps {
   onNavigate: (page: string) => void;
 }
 
+interface ProfileFormData {
+  phone: string;
+  address: string;
+  bankName: string;
+  accountNumber: string;
+  nicNumber: string;
+}
+
 export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfilePageProps) {
   const profile = getLecturerProfile(currentUser.id);
 
-  const [phone, setPhone] = useState(currentUser.phone || '');
-  const [address, setAddress] = useState(currentUser.address || '');
-  const [bankName, setBankName] = useState(profile?.bankName || '');
-  const [accountNumber, setAccountNumber] = useState(profile?.accountNumber || '');
-  const [nicNumber, setNicNumber] = useState(profile?.nicNumber || '');
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors }
+  } = useForm<ProfileFormData>({
+    defaultValues: {
+      phone: currentUser.phone || '',
+      address: currentUser.address || '',
+      bankName: profile?.bankName || '',
+      accountNumber: profile?.accountNumber || '',
+      nicNumber: profile?.nicNumber || '',
+    }
+  });
+
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = (data: ProfileFormData) => {
     setIsSubmitting(true);
+    console.log('Form Data:', { ...data, cvFile });
 
     // Simulate API call
     setTimeout(() => {
@@ -68,7 +89,7 @@ export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfile
         </Card>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-[var(--space-xl)]">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-[var(--space-xl)]">
         {/* Basic Information */}
         <Card>
           <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
@@ -94,15 +115,33 @@ export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfile
               helperText="Contact your coordinator to update your email"
             />
 
-            <Input
-              label="Phone Number"
-              type="tel"
-              placeholder="+94 77 123 4567"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              fullWidth
-            />
+            <div className="flex flex-col gap-[var(--space-sm)] w-full">
+              <label className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)]">
+                Phone Number <span className="text-[var(--color-error)]">*</span>
+              </label>
+              <Controller
+                name="phone"
+                control={control}
+                rules={{ required: 'Phone number is required' }}
+                render={({ field: { onChange, value } }) => (
+                  <PhoneInput
+                    value={value}
+                    onChange={onChange}
+                    defaultCountry="LK"
+                    className={`
+                      flex h-12 w-full rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-sm placeholder:text-gray-400 
+                      focus-within:border-[var(--color-primary)] focus-within:ring-4 focus-within:ring-[var(--color-primary)] focus-within:ring-opacity-10
+                      ${errors.phone ? 'border-[var(--color-error)] focus-within:border-[var(--color-error)] focus-within:ring-[var(--color-error)]' : ''}
+                    `}
+                  />
+                )}
+              />
+              {errors.phone && (
+                <span className="text-[var(--font-size-small)] text-[var(--color-error)]">
+                  {errors.phone.message}
+                </span>
+              )}
+            </div>
 
             <div>
               <label
@@ -114,12 +153,19 @@ export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfile
               <textarea
                 id="address"
                 rows={3}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
                 placeholder="Enter your complete address"
-                required
-                className="w-full px-[var(--space-md)] py-[var(--space-sm)] border border-[#CBD5E1] rounded-lg text-[var(--font-size-body)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-opacity-20 resize-vertical"
+                className={`w-full px-[var(--space-md)] py-[var(--space-sm)] border rounded-lg text-[var(--font-size-body)] resize-vertical
+                  ${errors.address
+                    ? 'border-[var(--color-error)] focus:border-[var(--color-error)] focus:ring-2 focus:ring-[var(--color-error)] focus:ring-opacity-20'
+                    : 'border-[#CBD5E1] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-opacity-20'}
+                `}
+                {...register("address", { required: "Address is required" })}
               />
+              {errors.address && (
+                <span className="text-[var(--font-size-small)] text-[var(--color-error)] mt-1 block">
+                  {errors.address.message}
+                </span>
+              )}
             </div>
           </div>
         </Card>
@@ -143,32 +189,35 @@ export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfile
               label="Bank Name"
               type="text"
               placeholder="e.g., Bank of Ceylon"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              required
               fullWidth
+              {...register("bankName", { required: "Bank name is required" })}
+              error={errors.bankName?.message}
             />
 
             <Input
               label="Account Number"
               type="text"
               placeholder="Enter your account number"
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-              required
               fullWidth
               helperText="Please verify this information is correct for payment processing"
+              {...register("accountNumber", { required: "Account number is required" })}
+              error={errors.accountNumber?.message}
             />
 
             <Input
               label="NIC Number"
               type="text"
               placeholder="e.g., 123456789V or 200012345678"
-              value={nicNumber}
-              onChange={(e) => setNicNumber(e.target.value)}
-              required
               fullWidth
               helperText="Enter your National Identity Card number"
+              {...register("nicNumber", {
+                required: "NIC number is required",
+                pattern: {
+                  value: /^([0-9]{9}[x|X|v|V]|[0-9]{12})$/,
+                  message: "Invalid NIC format (e.g., 123456789V or 200012345678)"
+                }
+              })}
+              error={errors.nicNumber?.message}
             />
           </div>
 
