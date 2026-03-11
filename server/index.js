@@ -128,7 +128,7 @@ app.post('/users/setup', async (req, res) => {
 
     // Update user
     const result = await db.query(
-      'UPDATE users SET name = $1, passwordhash = $2 WHERE email = $3 RETURNING userid',
+      'UPDATE users SET name = $1, passwordhash = $2 WHERE email = $3 RETURNING *',
       [name, hashedPassword, email]
     );
 
