@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { Sidebar } from '../components/Sidebar';
-import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -60,16 +58,10 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
   const attendanceRate = Math.round((mockSessions.filter(s => s.attended).length / completedSessions) * 100) || 0;
   
   return (
-    <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar 
-        role={currentUser.role} 
-        currentPage="reports" 
-        onNavigate={onNavigate} onLogout={onLogout} 
-      />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header userName={currentUser.name} userRole={currentUser.role === 'staff' ? 'Staff' : currentUser.role === 'main-coordinator' ? 'Main Coordinator' : 'Sub-Coordinator'} />
-        
+    <div className="h-full">
+            
+      <div className="flex-1 flex flex-col h-full">
+                
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
             {/* Page Title */}

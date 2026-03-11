@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { Toaster, toast } from 'sonner';
+import { Sidebar } from './components/Sidebar';
+import { Header } from './components/Header';
 import { LoginPage } from './pages/LoginPage';
 import { MainCoordinatorDashboard } from './pages/MainCoordinatorDashboard';
 import { UserManagementPage } from './pages/UserManagementPage';
@@ -9,7 +11,7 @@ import { CreateModulePage } from './pages/CreateModulePage';
 import { SubCoordinatorDashboard } from './pages/SubCoordinatorDashboard';
 import { ModuleManagementPage } from './pages/ModuleManagementPage';
 import { LecturerPortal } from './pages/LecturerPortal';
-import { LectureReschedulePage } from './pages/LectureReschedulePage';
+import { MyLecturesPage } from './pages/MyLecturesPage';
 import { AttendanceRecordingPage } from './pages/AttendanceRecordingPage';
 import { LecturerProfilePage } from './pages/LecturerProfilePage';
 import { UserProfilePage } from './pages/UserProfilePage';
@@ -27,7 +29,7 @@ type Page =
   | 'module-management'
   | 'attendance'
   | 'lecturer-portal'
-  | 'reschedule'
+  | 'my-lectures'
   | 'lecturer-profile'
   | 'user-profile'
   | 'reports';
@@ -169,8 +171,8 @@ export default function App() {
       case 'lecturer-portal':
         return <LecturerPortal currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
-      case 'reschedule':
-        return <LectureReschedulePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+      case 'my-lectures':
+        return <MyLecturesPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'lecturer-profile':
         return <LecturerProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
@@ -195,9 +197,33 @@ export default function App() {
     }
   };
 
+  const getDisplayRole = (role: string) => {
+    switch (role) {
+      case 'main-coordinator': return 'Main Coordinator';
+      case 'sub-coordinator': return 'Sub-Coordinator';
+      case 'lecturer': return 'Visiting Lecturer';
+      case 'staff': return 'Staff';
+      default: return '';
+    }
+  };
+
   return (
-    <div className="min-h-screen">
-      {renderPage()}
+    <div className="flex h-screen bg-[var(--color-bg-main)]">
+      {currentUser && currentPage !== 'login' && currentPage !== 'setup-account' ? (
+        <>
+          <Sidebar role={currentUser.role} currentPage={currentPage} onNavigate={handleNavigate} onLogout={handleLogout} />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header userName={currentUser.name} userRole={getDisplayRole(currentUser.role)} />
+            <main className="flex-1 overflow-y-auto w-full">
+              {renderPage()}
+            </main>
+          </div>
+        </>
+      ) : (
+        <div className="w-full h-full">
+          {renderPage()}
+        </div>
+      )}
       <Toaster />
     </div>
   );

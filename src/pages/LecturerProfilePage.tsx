@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { Sidebar } from '../components/Sidebar';
-import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -41,12 +39,10 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
   };
   
   return (
-    <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="lecturer" currentPage="lecturer-profile" onNavigate={onNavigate} onLogout={onLogout} />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header userName={currentUser.name} userRole="Visiting Lecturer" />
-        
+    <div className="h-full">
+            
+      <div className="flex-1 flex flex-col h-full">
+                
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-4xl mx-auto space-y-[var(--space-xl)]">
             {/* Breadcrumb */}

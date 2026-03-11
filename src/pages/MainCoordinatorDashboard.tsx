@@ -1,6 +1,4 @@
 import React from 'react';
-import { Sidebar } from '../components/Sidebar';
-import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
@@ -27,18 +25,10 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
   ];
   
   return (
-    <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="main-coordinator" currentPage="main-dashboard" onNavigate={onNavigate} onLogout={onLogout} />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header 
-          userName={currentUser.name} 
-          userRole="Main Coordinator" 
-          notificationCount={3} 
-          onProfileClick={() => onNavigate('user-profile')}
-          onLogout={onLogout} 
-        />
-        
+    <div className="h-full">
+            
+      <div className="flex-1 flex flex-col h-full">
+                
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
             {/* Page Title */}

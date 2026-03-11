@@ -1,6 +1,4 @@
 import React from 'react';
-import { Sidebar } from '../components/Sidebar';
-import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
@@ -39,19 +37,15 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
   };
   
   return (
-    <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} onLogout={onLogout} />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header userName={currentUser.name} userRole="Visiting Lecturer" />
-        
+    <div className="h-full">
+            
+      <div className="flex-1 flex flex-col h-full">
+                
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-6xl mx-auto space-y-[var(--space-xl)]">
             {/* Page Title */}
             <div>
-              <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                My Schedule
-              </h1>
+              <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">Dashboard</h1>
               <p className="text-[var(--color-text-secondary)] mt-[var(--space-sm)]">
                 View your upcoming sessions and manage your teaching schedule
               </p>
@@ -148,7 +142,7 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => onNavigate('reschedule')}
+                          onClick={() => onNavigate('my-lectures')}
                         >
                           Reschedule
                         </Button>

@@ -45,9 +45,8 @@ export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProp
         ];
       case 'lecturer':
         return [
-          { label: 'My Schedule', icon: <Calendar className="w-5 h-5" />, href: 'lecturer-portal' },
-          { label: 'Attendance', icon: <ClipboardList className="w-5 h-5" />, href: 'attendance' },
-          { label: 'Reschedule', icon: <Clock className="w-5 h-5" />, href: 'reschedule' },
+          { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'lecturer-portal' },
+          { label: 'My Lectures', icon: <BookOpen className="w-5 h-5" />, href: 'my-lectures' },
           { label: 'My Profile', icon: <UserCircle className="w-5 h-5" />, href: 'lecturer-profile' },
         ];
       case 'staff':
