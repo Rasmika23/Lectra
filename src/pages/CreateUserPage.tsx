@@ -63,7 +63,7 @@ export function CreateUserPage({ currentUser, onNavigate, onLogout }: CreateUser
 
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="main-coordinator" currentPage="create-user" onNavigate={onNavigate} />
+      <Sidebar role="main-coordinator" currentPage="create-user" onNavigate={onNavigate} onLogout={onLogout} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header

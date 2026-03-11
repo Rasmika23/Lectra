@@ -11,6 +11,7 @@ import { mockStudentTimetable, mockSessions } from '../lib/mockData';
 interface LectureReschedulePageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
 interface TimeSlot {
@@ -20,7 +21,7 @@ interface TimeSlot {
   reason?: string;
 }
 
-export function LectureReschedulePage({ currentUser, onNavigate }: LectureReschedulePageProps) {
+export function LectureReschedulePage({ currentUser, onNavigate, onLogout }: LectureReschedulePageProps) {
   const [duration, setDuration] = useState('');
   const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
@@ -135,7 +136,7 @@ export function LectureReschedulePage({ currentUser, onNavigate }: LectureResche
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} />
+      <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Visiting Lecturer" />

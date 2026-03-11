@@ -11,9 +11,10 @@ import { getLecturerProfile } from '../lib/mockData';
 interface LecturerProfilePageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfilePageProps) {
+export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: LecturerProfilePageProps) {
   const profile = getLecturerProfile(currentUser.id);
   
   const [phone, setPhone] = useState(currentUser.phone || '');
@@ -41,7 +42,7 @@ export function LecturerProfilePage({ currentUser, onNavigate }: LecturerProfile
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="lecturer" currentPage="lecturer-profile" onNavigate={onNavigate} />
+      <Sidebar role="lecturer" currentPage="lecturer-profile" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Visiting Lecturer" />

@@ -23,9 +23,10 @@ interface SidebarProps {
   role: 'main-coordinator' | 'sub-coordinator' | 'lecturer' | 'staff';
   currentPage: string;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
+export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProps) {
   const getNavItems = (): NavItem[] => {
     switch (role) {
       case 'main-coordinator':
@@ -111,7 +112,13 @@ export function Sidebar({ role, currentPage, onNavigate }: SidebarProps) {
       {/* Logout */}
       <div className="p-[var(--space-md)] border-t border-[#E2E8F0]">
         <button
-          onClick={() => onNavigate('login')}
+          onClick={() => {
+            if (onLogout) {
+              onLogout();
+            } else {
+              onNavigate('login');
+            }
+          }}
           className="w-full flex items-center gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-sm)] rounded-lg text-left text-[var(--color-error)] hover:bg-[#FEE2E2] transition-all duration-200"
         >
           <LogOut className="w-5 h-5" />

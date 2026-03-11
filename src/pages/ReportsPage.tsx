@@ -12,9 +12,10 @@ import { mockSessions, mockModules } from '../lib/mockData';
 interface ReportsPageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
+export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPageProps) {
   const [reportType, setReportType] = useState('');
   const [selectedModule, setSelectedModule] = useState('all');
   const [startDate, setStartDate] = useState('2026-01-01');
@@ -63,7 +64,7 @@ export function ReportsPage({ currentUser, onNavigate }: ReportsPageProps) {
       <Sidebar 
         role={currentUser.role} 
         currentPage="reports" 
-        onNavigate={onNavigate} 
+        onNavigate={onNavigate} onLogout={onLogout} 
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">

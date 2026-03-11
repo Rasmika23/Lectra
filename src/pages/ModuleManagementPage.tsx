@@ -12,9 +12,10 @@ import { mockModules } from '../lib/mockData';
 interface ModuleManagementPageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function ModuleManagementPage({ currentUser, onNavigate }: ModuleManagementPageProps) {
+export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: ModuleManagementPageProps) {
   const [selectedModule, setSelectedModule] = useState(mockModules[0].id);
   const [defaultDay, setDefaultDay] = useState('Wednesday');
   const [defaultTime, setDefaultTime] = useState('10:00');
@@ -52,7 +53,7 @@ export function ModuleManagementPage({ currentUser, onNavigate }: ModuleManageme
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="sub-coordinator" currentPage="module-management" onNavigate={onNavigate} />
+      <Sidebar role="sub-coordinator" currentPage="module-management" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Sub-Coordinator" />

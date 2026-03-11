@@ -149,37 +149,37 @@ export default function App() {
         return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'user-management':
-        return <UserManagementPage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <UserManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'create-user':
         return <CreateUserPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'create-module':
-        return <CreateModulePage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <CreateModulePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'sub-dashboard':
         return <SubCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'module-management':
-        return <ModuleManagementPage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <ModuleManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'attendance':
-        return <AttendanceRecordingPage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <AttendanceRecordingPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'lecturer-portal':
-        return <LecturerPortal currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <LecturerPortal currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'reschedule':
-        return <LectureReschedulePage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <LectureReschedulePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'lecturer-profile':
-        return <LecturerProfilePage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <LecturerProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'user-profile':
-        return <UserProfilePage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <UserProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'reports':
-        return <ReportsPage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return <ReportsPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'login':
         return <LoginPage onLogin={handleLogin} />;

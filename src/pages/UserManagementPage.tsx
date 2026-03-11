@@ -18,9 +18,10 @@ interface User {
 interface UserManagementPageProps {
     currentUser: any;
     onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function UserManagementPage({ currentUser, onNavigate }: UserManagementPageProps) {
+export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserManagementPageProps) {
     const [users, setUsers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRole, setSelectedRole] = useState('All Roles');
@@ -100,7 +101,7 @@ export function UserManagementPage({ currentUser, onNavigate }: UserManagementPa
 
     return (
         <div className="flex h-screen bg-[var(--color-bg-main)]">
-            <Sidebar role="main-coordinator" currentPage="user-management" onNavigate={onNavigate} />
+            <Sidebar role="main-coordinator" currentPage="user-management" onNavigate={onNavigate} onLogout={onLogout} />
 
             <div className="flex-1 flex flex-col overflow-hidden">
                 <Header

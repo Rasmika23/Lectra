@@ -28,7 +28,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="main-coordinator" currentPage="main-dashboard" onNavigate={onNavigate} />
+      <Sidebar role="main-coordinator" currentPage="main-dashboard" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header 

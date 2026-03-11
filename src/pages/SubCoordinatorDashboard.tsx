@@ -31,7 +31,7 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="sub-coordinator" currentPage="sub-dashboard" onNavigate={onNavigate} />
+      <Sidebar role="sub-coordinator" currentPage="sub-dashboard" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header 

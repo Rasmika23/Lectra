@@ -10,9 +10,10 @@ import { ArrowLeft, CheckCircle } from 'lucide-react';
 interface CreateModulePageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function CreateModulePage({ currentUser, onNavigate }: CreateModulePageProps) {
+export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateModulePageProps) {
   const [moduleName, setModuleName] = useState('');
   const [moduleCode, setModuleCode] = useState('');
   const [academicYear, setAcademicYear] = useState('');
@@ -65,7 +66,7 @@ export function CreateModulePage({ currentUser, onNavigate }: CreateModulePagePr
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="main-coordinator" currentPage="create-module" onNavigate={onNavigate} />
+      <Sidebar role="main-coordinator" currentPage="create-module" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Main Coordinator" />

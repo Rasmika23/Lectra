@@ -10,9 +10,10 @@ import { mockSessions, mockModules } from '../lib/mockData';
 interface AttendanceRecordingPageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function AttendanceRecordingPage({ currentUser, onNavigate }: AttendanceRecordingPageProps) {
+export function AttendanceRecordingPage({ currentUser, onNavigate, onLogout }: AttendanceRecordingPageProps) {
   // Get completed sessions without attendance recorded
   const sessionsNeedingAttendance = mockSessions.filter(
     s => s.status === 'completed' && !s.attended
@@ -72,7 +73,7 @@ export function AttendanceRecordingPage({ currentUser, onNavigate }: AttendanceR
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="sub-coordinator" currentPage="attendance" onNavigate={onNavigate} />
+      <Sidebar role="sub-coordinator" currentPage="attendance" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Sub-Coordinator" />

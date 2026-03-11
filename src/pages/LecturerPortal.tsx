@@ -10,9 +10,10 @@ import { getSessionsByLecturerId } from '../lib/mockData';
 interface LecturerPortalProps {
   currentUser: any;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function LecturerPortal({ currentUser, onNavigate }: LecturerPortalProps) {
+export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPortalProps) {
   const sessions = getSessionsByLecturerId(currentUser.id);
   const upcomingSessions = sessions
     .filter(s => s.status === 'scheduled')
@@ -39,7 +40,7 @@ export function LecturerPortal({ currentUser, onNavigate }: LecturerPortalProps)
   
   return (
     <div className="flex h-screen bg-[var(--color-bg-main)]">
-      <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} />
+      <Sidebar role="lecturer" currentPage="lecturer-portal" onNavigate={onNavigate} onLogout={onLogout} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header userName={currentUser.name} userRole="Visiting Lecturer" />

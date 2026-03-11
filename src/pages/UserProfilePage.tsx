@@ -8,9 +8,10 @@ import { User as UserType } from '../lib/mockData';
 interface UserProfilePageProps {
   currentUser: UserType;
   onNavigate: (page: string) => void;
+  onLogout?: () => void;
 }
 
-export function UserProfilePage({ currentUser, onNavigate }: UserProfilePageProps) {
+export function UserProfilePage({ currentUser, onNavigate, onLogout }: UserProfilePageProps) {
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
   const [phone, setPhone] = useState(currentUser.phone || '');
