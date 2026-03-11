@@ -7,7 +7,7 @@ import { Mail, Lock, Sparkles } from 'lucide-react';
 import { getUserByEmail } from '../lib/mockData';
 
 interface LoginPageProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: any, token?: string) => void;
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
@@ -34,7 +34,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const data = await response.json();
 
       if (response.ok) {
-        onLogin(data);
+        onLogin(data.user || data, data.token); // Handle both old and new response formats during transition
       } else {
         setError(data.error || 'Login failed');
       }

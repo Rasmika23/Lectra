@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 const db = require('./db');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -54,7 +55,14 @@ app.post('/login', async (req, res) => {
         role: frontendRole
       };
 
-      res.json(userResponse);
+      // Generate JWT Token
+      const token = jwt.sign(
+        { id: user.userid, email: user.email, role: frontendRole },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      res.json({ user: userResponse, token });
     } else {
       res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -125,7 +133,36 @@ app.post('/users/setup', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
-      res.json({ message: 'Account set up successfully' });
+      const user = result.rows[0];
+
+      // Get user role for token
+      const roleResult = await db.query(
+        'SELECT rolename FROM roles WHERE roleid = $1',
+        [user.roleid]
+      );
+
+      let frontendRole = 'staff';
+      if (roleResult.rows.length > 0) {
+        const dbRole = roleResult.rows[0].rolename;
+        if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
+        else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
+        else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
+      }
+
+      const userResponse = {
+        id: user.userid,
+        name: user.name,
+        email: user.email,
+        role: frontendRole
+      };
+
+      const token = jwt.sign(
+        { id: user.userid, email: user.email, role: frontendRole },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      res.json({ message: 'Account set up successfully', user: userResponse, token });
     } else {
       res.status(404).json({ error: 'User not found' });
     }
@@ -133,6 +170,64 @@ app.post('/users/setup', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Users Management Endpoints ---
+
+// Get all users
+app.get('/users', async (req, res) => {
+  try {
+    const query = `
+      SELECT u.userid as id, u.name, u.email, r.rolename 
+      FROM users u 
+      JOIN roles r ON u.roleid = r.roleid 
+      ORDER BY u.userid DESC
+    `;
+    const result = await db.query(query);
+
+    // Map DB role name to frontend expected role string
+    const mappedUsers = result.rows.map(user => {
+      let frontendRole = 'staff';
+      const dbRole = user.rolename;
+
+      if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
+      else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
+      else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
+      else if (dbRole === 'Staff') frontendRole = 'staff';
+
+      return {
+        id: user.id.toString(), // Frontend expects string ID typically, or number is fine. Using toString to be safe.
+        name: user.name,
+        email: user.email,
+        role: frontendRole,
+        department: 'Computing', // Temporary mock data for missing fields
+        joinDate: new Date().toISOString().split('T')[0],
+      };
+    });
+
+    res.json(mappedUsers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching users' });
+  }
+});
+
+// Delete user
+app.delete('/users/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await db.query('DELETE FROM users WHERE userid = $1 RETURNING userid', [id]);
+
+    if (result.rows.length > 0) {
+      res.json({ message: 'User deleted successfully' });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error deleting user' });
   }
 });
 

@@ -1,15 +1,23 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: process.env.SMTP_PORT || 465,
+  secure: true, // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 async function sendInviteEmail(email, inviteLink) {
-    try {
-        const data = await resend.emails.send({
-            from: 'onboarding@resend.dev', // Default test domain. Change to your verified domain in prod.
-            to: email,
-            subject: 'Welcome to Lectra - Setup your Account',
-            html: `
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM_EMAIL || '"Lectra" <noreply@lectra.com>',
+      to: email,
+      subject: 'Welcome to Lectra - Setup your Account',
+      html: `
         <div style="font-family: sans-serif; padding: 20px;">
           <h1>Welcome to Lectra!</h1>
           <p>You have been invited to join the Visiting Lecturers Management System.</p>
@@ -18,13 +26,13 @@ async function sendInviteEmail(email, inviteLink) {
           <p style="margin-top: 20px; color: #666;">Or copy this link: ${inviteLink}</p>
         </div>
       `,
-        });
-        console.log('Email sent:', data);
-        return { success: true, data };
-    } catch (error) {
-        console.error('Email sending failed:', error);
-        return { success: false, error };
-    }
+    });
+    console.log('Email sent:', info.messageId);
+    return { success: true, data: info };
+  } catch (error) {
+    console.error('Email sending failed:', error);
+    return { success: false, error };
+  }
 }
 
 module.exports = { sendInviteEmail };

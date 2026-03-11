@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { jwtDecode } from 'jwt-decode';
 import { Toaster, toast } from 'sonner';
 import { LoginPage } from './pages/LoginPage';
 import { MainCoordinatorDashboard } from './pages/MainCoordinatorDashboard';
+import { UserManagementPage } from './pages/UserManagementPage';
 import { CreateUserPage } from './pages/CreateUserPage';
 import { CreateModulePage } from './pages/CreateModulePage';
 import { SubCoordinatorDashboard } from './pages/SubCoordinatorDashboard';
@@ -18,6 +20,7 @@ type Page =
   | 'login'
   | 'setup-account'
   | 'main-dashboard'
+  | 'user-management'
   | 'create-user'
   | 'create-module'
   | 'sub-dashboard'
@@ -30,8 +33,41 @@ type Page =
   | 'reports';
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('login');
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const savedUser = localStorage.getItem('currentUser');
+    const token = localStorage.getItem('jwtToken');
+
+    if (savedUser && token) {
+      try {
+        const decoded: any = jwtDecode(token);
+        // Check if token is expired (JWT exp is in seconds)
+        if (decoded.exp * 1000 < Date.now()) {
+          console.log('Token expired, logging out');
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('currentPage');
+          return null;
+        }
+        return JSON.parse(savedUser);
+      } catch (error) {
+        console.error('Invalid token', error);
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('jwtToken');
+        localStorage.removeItem('currentPage');
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [currentPage, setCurrentPage] = useState<Page>(() => {
+    const savedPage = localStorage.getItem('currentPage');
+    // If they aren't logged in, default to login
+    if (!localStorage.getItem('currentUser') && savedPage !== 'setup-account') {
+      return 'login';
+    }
+    return (savedPage as Page) || 'login';
+  });
 
   useEffect(() => {
     // Check for setup account URL
@@ -56,37 +92,47 @@ export default function App() {
     checkConnection();
   }, []);
 
-  const handleLogin = (user: any) => {
+  const handleLogin = (user: any, token?: string) => {
     if (user) {
       setCurrentUser(user);
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      if (token) {
+        localStorage.setItem('jwtToken', token);
+      }
 
       // Route to appropriate dashboard based on role
+      let targetPage: Page = 'login';
       switch (user.role) {
         case 'main-coordinator':
-          setCurrentPage('main-dashboard');
+          targetPage = 'main-dashboard';
           break;
         case 'sub-coordinator':
-          setCurrentPage('sub-dashboard');
+          targetPage = 'sub-dashboard';
           break;
         case 'lecturer':
-          setCurrentPage('lecturer-portal');
+          targetPage = 'lecturer-portal';
           break;
         case 'staff':
-          setCurrentPage('reports');
+          targetPage = 'reports';
           break;
-        default:
-          setCurrentPage('login');
       }
+
+      setCurrentPage(targetPage);
+      localStorage.setItem('currentPage', targetPage);
     }
   };
 
   const handleNavigate = (page: string) => {
     setCurrentPage(page as Page);
+    localStorage.setItem('currentPage', page);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setCurrentPage('login');
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('jwtToken');
+    localStorage.removeItem('currentPage');
   };
 
   // Render appropriate page
@@ -101,6 +147,9 @@ export default function App() {
 
       case 'main-dashboard':
         return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+
+      case 'user-management':
+        return <UserManagementPage currentUser={currentUser} onNavigate={handleNavigate} />;
 
       case 'create-user':
         return <CreateUserPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
@@ -136,7 +185,7 @@ export default function App() {
         return <LoginPage onLogin={handleLogin} />;
 
       case 'setup-account':
-        return <SetupAccountPage onNavigate={handleNavigate} />;
+        return <SetupAccountPage onNavigate={handleNavigate} onLogin={handleLogin} />;
 
       case 'main-dashboard':
         return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;

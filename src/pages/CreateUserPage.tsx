@@ -77,11 +77,11 @@ export function CreateUserPage({ currentUser, onNavigate, onLogout }: CreateUser
           <div className="max-w-3xl mx-auto space-y-[var(--space-xl)]">
             {/* Breadcrumb */}
             <button
-              onClick={() => onNavigate('main-dashboard')}
+              onClick={() => onNavigate('user-management')}
               className="flex items-center gap-[var(--space-sm)] text-[var(--color-primary)] hover:underline"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Dashboard</span>
+              <span>Back to User Management</span>
             </button>
 
             {/* Page Title */}
@@ -182,7 +182,7 @@ export function CreateUserPage({ currentUser, onNavigate, onLogout }: CreateUser
                     type="button"
                     variant="ghost"
                     size="lg"
-                    onClick={() => onNavigate('main-dashboard')}
+                    onClick={() => onNavigate('user-management')}
                   >
                     Cancel
                   </Button>

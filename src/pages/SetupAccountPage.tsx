@@ -6,9 +6,10 @@ import { User, Lock, Sparkles, CheckCircle } from 'lucide-react';
 
 interface SetupAccountPageProps {
     onNavigate: (page: string) => void;
+    onLogin: (user: any, token?: string) => void;
 }
 
-export function SetupAccountPage({ onNavigate }: SetupAccountPageProps) {
+export function SetupAccountPage({ onNavigate, onLogin }: SetupAccountPageProps) {
     const [email, setEmail] = useState('');
     const [name, setName] = useState('');
     const [password, setPassword] = useState('');
@@ -54,7 +55,12 @@ export function SetupAccountPage({ onNavigate }: SetupAccountPageProps) {
             const data = await response.json();
 
             if (response.ok) {
-                setIsSuccess(true);
+                // Auto-login the user after setup using the returned user and token
+                if (data.user && data.token) {
+                    onLogin(data.user, data.token);
+                } else {
+                    setIsSuccess(true);
+                }
             } else {
                 setError(data.error || 'Failed to setup account');
             }
