@@ -77,7 +77,14 @@ class SlotFinderService {
                     // Iterate rows from row 2 onwards to check times
                     worksheet.eachRow((row, rowNumber) => {
                         if (rowNumber === 1) return; // skip header
-                        const timeStr = row.getCell(1).text.trim(); // Assume col 1 is Time
+                        let timeStr = '';
+                        const timeCell = row.getCell(1); // Assume col 1 is Time
+                        if (timeCell.value instanceof Date) {
+                            // Excel saves times relative to 1899-12-30 UTC. Extract EXACT hour/minute from UTC string
+                            timeStr = timeCell.value.toISOString().substring(11, 16);
+                        } else {
+                            timeStr = timeCell.text.trim();
+                        }
                         if (!timeStr) return;
 
                         // Simple match for "HH:mm"

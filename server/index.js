@@ -204,7 +204,18 @@ app.post('/users/setup', async (req, res) => {
 app.get('/users', async (req, res) => {
   try {
     const query = `
-      SELECT u.userid as id, u.name, u.email, r.rolename 
+      SELECT 
+        u.userid as id, 
+        u.name, 
+        u.email, 
+        r.rolename,
+        CASE
+          WHEN r.rolename = 'SubCoordinator' THEN
+            (SELECT string_agg(m.modulecode, ', ') FROM module m WHERE m.subcoordinatorid = u.userid)
+          WHEN r.rolename = 'Lecturer' THEN
+            (SELECT string_agg(m.modulecode, ', ') FROM module m JOIN modulelecturer ml ON m.moduleid = ml.moduleid WHERE ml.lecturerid = u.userid)
+          ELSE NULL
+        END as assignedmodules
       FROM users u 
       JOIN roles r ON u.roleid = r.roleid 
       ORDER BY u.userid DESC
@@ -228,6 +239,7 @@ app.get('/users', async (req, res) => {
         role: frontendRole,
         department: 'Computing', // Temporary mock data for missing fields
         joinDate: new Date().toISOString().split('T')[0],
+        assignedModules: user.assignedmodules || '',
       };
     });
 

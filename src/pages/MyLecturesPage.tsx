@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
@@ -107,45 +107,54 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         { value: '3', label: '3 hours' },
     ];
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    const timeSlots = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+    
+    const [availableSlotsGrid, setAvailableSlotsGrid] = useState<any[]>([]);
+    const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
-    const getWeekDates = (weekOffset: number) => {
-        const today = new Date('2026-01-28');
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay() + 1 + (weekOffset * 7));
-        return days.map((day, index) => {
-            const date = new Date(startOfWeek);
-            date.setDate(startOfWeek.getDate() + index);
+    useEffect(() => {
+        if (duration && reschedulingSession) {
+            setIsLoadingSlots(true);
+            // Since the UI uses mock sessions "test-session-1-X", force fallback to real Session ID = 1 for testing purposes.
+            // In full production, session.id would just be the database sessionid.
+            const sessionIdStr = reschedulingSession.id.toString().includes('test-session') ? '1' : reschedulingSession.id;
+            
+            fetch(`http://localhost:5000/sessions/available-slots?sessionId=${sessionIdStr}&durationHours=${duration}&weekOffset=${selectedWeek}`)
+                .then(res => res.json())
+                .then(data => {
+                    setAvailableSlotsGrid(Array.isArray(data) ? data : []);
+                    setIsLoadingSlots(false);
+                })
+                .catch(err => {
+                    console.error(err);
+                    setIsLoadingSlots(false);
+                });
+        } else {
+            setAvailableSlotsGrid([]);
+        }
+    }, [duration, selectedWeek, reschedulingSession]);
+
+    const timeSlots = availableSlotsGrid.length > 0 ? availableSlotsGrid[0].slots.map((s: any) => s.time) : [];
+
+    const getWeekDates = () => {
+        if (availableSlotsGrid.length === 0) return ['', '', '', '', ''];
+        return availableSlotsGrid.map(d => {
+            const date = new Date(d.date);
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         });
     };
 
     const isSlotAvailable = (day: string, time: string): { available: boolean; reason?: string } => {
         if (!duration) return { available: false, reason: 'Select duration' };
-        const durationHours = parseFloat(duration);
-        const [hour] = time.split(':').map(Number);
-        const endHour = hour + durationHours;
-
-        const studentConflict = mockStudentTimetable.some(slot => {
-            if (slot.day !== day) return false;
-            const [slotStartHour] = slot.startTime.split(':').map(Number);
-            const [slotEndHour] = slot.endTime.split(':').map(Number);
-            return (hour < slotEndHour && endHour > slotStartHour);
-        });
-        if (studentConflict) return { available: false, reason: 'Student Busy' };
-
-        const lecturerConflict = mockSessions.some(session => {
-            if (session.id === reschedulingSession?.id) return false; // Ignore current session
-            const sessionDay = new Date(session.date).toLocaleDateString('en-US', { weekday: 'long' });
-            if (sessionDay !== day) return false;
-            const [sessionHour] = session.time.split(':').map(Number);
-            const sessionEndHour = sessionHour + session.duration;
-            return (hour < sessionEndHour && endHour > sessionHour);
-        });
-        if (lecturerConflict) return { available: false, reason: 'Lecturer Busy' };
-
-        if (endHour > 18) return { available: false, reason: 'After hours' };
-        return { available: true };
+        if (availableSlotsGrid.length === 0) return { available: false, reason: 'Loading...' };
+        
+        const dayObj = availableSlotsGrid.find(d => d.day === day);
+        if (!dayObj) return { available: false, reason: 'No data' };
+        
+        const slotObj = dayObj.slots.find((s: any) => s.time === time);
+        if (!slotObj) return { available: false, reason: 'No data' };
+        
+        if (slotObj.status === 'AVAILABLE') return { available: true };
+        return { available: false, reason: slotObj.reason || 'Busy' };
     };
 
     const getTimeRange = (startTime: string, durationHours: number): string => {
@@ -169,7 +178,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         alert('Reschedule request submitted successfully!');
     };
 
-    const weekDates = getWeekDates(selectedWeek);
+    const weekDates = getWeekDates();
 
     return (
         <div className="h-full">
@@ -352,7 +361,13 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
 
                                 {duration && (
                                     <Card padding="none">
-                                        <div className="overflow-x-auto">
+                                        {isLoadingSlots && (
+                                            <div className="p-[var(--space-md)] text-center text-[var(--color-primary)] font-bold">
+                                                Loading available slots from backend...
+                                            </div>
+                                        )}
+                                        {!isLoadingSlots && (
+                                            <div className="overflow-x-auto">
                                             <table className="w-full min-w-[800px]">
                                                 <thead>
                                                     <tr className="border-b border-[#E2E8F0]">
@@ -370,7 +385,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {timeSlots.map((time) => (
+                                                    {timeSlots.map((time: string) => (
                                                         <tr key={time} className="border-b border-[#E2E8F0] last:border-0">
                                                             <td className="p-[var(--space-md)] font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-sidebar)]">
                                                                 {time}
@@ -403,7 +418,8 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                     ))}
                                                 </tbody>
                                             </table>
-                                        </div>
+                                            </div>
+                                        )}
                                     </Card>
                                 )}
                             </>

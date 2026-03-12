@@ -11,6 +11,7 @@ interface User {
     role: string;
     department: string;
     joinDate: string;
+    assignedModules?: string;
 }
 
 interface UserManagementPageProps {
@@ -160,21 +161,22 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-[var(--color-bg-sidebar)] border-b border-[#E2E8F0] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
-                                            <th className="p-[var(--space-md)] font-semibold w-[50%]">User Details</th>
-                                            <th className="p-[var(--space-md)] font-semibold w-[30%]">Role</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[40%]">User Details</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[20%]">Role</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[20%]">Assigned Modules</th>
                                             <th className="p-[var(--space-md)] font-semibold w-[20%] text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {isLoading ? (
                                             <tr>
-                                                <td colSpan={4} className="p-[var(--space-xl)] text-center text-[var(--color-text-secondary)]">
+                                                <td colSpan={5} className="p-[var(--space-xl)] text-center text-[var(--color-text-secondary)]">
                                                     Loading users...
                                                 </td>
                                             </tr>
                                         ) : filteredUsers.length === 0 ? (
                                             <tr>
-                                                <td colSpan={4} className="p-[var(--space-xl)] text-center text-[var(--color-text-secondary)]">
+                                                <td colSpan={5} className="p-[var(--space-xl)] text-center text-[var(--color-text-secondary)]">
                                                     <div className="flex flex-col items-center gap-3">
                                                         <Users className="w-8 h-8 opacity-50" />
                                                         <p>No users found matching your search.</p>
@@ -197,6 +199,9 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
                                                         <StatusBadge status={getRoleBadgeVariant(user.role)}>
                                                             {getRoleDisplay(user.role)}
                                                         </StatusBadge>
+                                                    </td>
+                                                    <td className="p-[var(--space-md)] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
+                                                        {user.assignedModules || '-'}
                                                     </td>
                                                     <td className="p-[var(--space-md)] text-right">
                                                         <Button
