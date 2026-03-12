@@ -4,12 +4,37 @@ require('dotenv').config();
 const db = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const SlotFinderService = require('./services/SlotFinderService');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Set up static uploads folder
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+app.use('/uploads', express.static(uploadDir));
+
+// Multer Config
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Save file with module ID context if available
+    const ext = path.extname(file.originalname);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `timetable-${uniqueSuffix}${ext}`);
+  }
+});
+const upload = multer({ storage: storage });
 
 // Login endpoint
 // Login endpoint
@@ -234,6 +259,73 @@ app.delete('/users/:id', async (req, res) => {
 // Test route
 app.get('/', (req, res) => {
   res.send('Lectra API is running');
+});
+
+// Get all modules
+app.get('/modules', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT moduleid, modulecode, modulename, academicyear, semester, studenttimetablepath FROM module ORDER BY academicyear DESC, semester DESC, modulecode ASC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching modules:', err);
+    res.status(500).json({ error: 'Server error fetching modules' });
+  }
+});
+
+// Rescheduling available slots endpoint
+app.get('/sessions/available-slots', async (req, res) => {
+  try {
+    const { sessionId, durationHours, weekOffset } = req.query;
+    if (!sessionId || !durationHours || weekOffset === undefined) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+    const grid = await SlotFinderService.getAvailableSlots(
+      parseInt(sessionId),
+      parseFloat(durationHours),
+      parseInt(weekOffset)
+    );
+    res.json(grid);
+  } catch (err) {
+    console.error('Error fetching available slots:', err);
+    res.status(500).json({ error: 'Server error retrieving available slots' });
+  }
+});
+
+// Upload timetable endpoint
+app.post('/modules/:moduleId/timetable', upload.single('timetable'), async (req, res) => {
+  try {
+    const { moduleId } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Relative path to store in DB
+    const relativePath = `uploads/${req.file.filename}`;
+
+    // Update the database
+    const updateRes = await db.query(
+      'UPDATE module SET studenttimetablepath = $1 WHERE moduleid = $2 RETURNING *',
+      [relativePath, moduleId]
+    );
+
+    if (updateRes.rows.length === 0) {
+      fs.unlinkSync(req.file.path); // remove the file if module not found
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    res.json({
+      message: 'Timetable uploaded successfully',
+      path: relativePath,
+      module: updateRes.rows[0]
+    });
+  } catch (err) {
+    console.error('Error uploading timetable:', err);
+    if (req.file) fs.unlinkSync(req.file.path); // clean up file on error
+    res.status(500).json({ error: 'Server error uploading timetable' });
+  }
 });
 
 // Example DB route - to be expanded

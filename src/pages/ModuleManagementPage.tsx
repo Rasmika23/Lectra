@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -14,20 +14,33 @@ interface ModuleManagementPageProps {
 }
 
 export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: ModuleManagementPageProps) {
-  const [selectedModule, setSelectedModule] = useState(mockModules[0].id);
+  const [modules, setModules] = useState<any[]>([]);
+  const [selectedModule, setSelectedModule] = useState('');
+
+  useEffect(() => {
+    fetch('http://localhost:5000/modules')
+      .then(res => res.json())
+      .then(data => {
+        setModules(data);
+        if (data.length > 0) setSelectedModule(data[0].moduleid);
+      })
+      .catch(console.error);
+  }, []);
   const [defaultDay, setDefaultDay] = useState('Wednesday');
   const [defaultTime, setDefaultTime] = useState('10:00');
   const [defaultEndTime, setDefaultEndTime] = useState('12:00');
   const [reminderTime, setReminderTime] = useState('48');
-  const [reminderContent, setReminderContent] = useState('Dear [Lecturer Name],\n\nThis is a friendly reminder that you have an upcoming lecture session:\n\nModule: [Module Code] - [Module Name]\nDate: [Date]\nTime: [Start Time] - [End Time]\nLocation: [Location]\n\nPlease ensure you are prepared. If you need to reschedule, please use the Lectra system as soon as possible.\n\nBest regards,\nLectra System');
+  const [reminderContent, setReminderContent] = useState('Dear [Lecturer Name],\\n\\nThis is a friendly reminder that you have an upcoming lecture session:\\n\\nModule: [Module Code] - [Module Name]\\nDate: [Date]\\nTime: [Start Time] - [End Time]\\nLocation: [Location]\\n\\nPlease ensure you are prepared. If you need to reschedule, please use the Lectra system as soon as possible.\\n\\nBest regards,\\nLectra System');
   const [timetableFile, setTimetableFile] = useState<File | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
   
-  const module = mockModules.find(m => m.id === selectedModule);
+  const module = modules.find(m => String(m.moduleid) === String(selectedModule));
   
-  const moduleOptions = mockModules.map(m => ({
-    value: m.id,
-    label: `${m.code} - ${m.name}`
+  const moduleOptions = modules.map(m => ({
+    value: String(m.moduleid),
+    label: `${m.modulecode} - ${m.modulename} (Yr ${m.academicyear}, Sem ${m.semester})`
   }));
   
   const dayOptions = [
@@ -47,6 +60,42 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const handleSaveSettings = () => {
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
+  };
+
+  const handleUploadTimetable = async () => {
+    if (!timetableFile || !selectedModule) return;
+    
+    setIsUploading(true);
+    setUploadMessage('');
+    
+    try {
+      const formData = new FormData();
+      formData.append('timetable', timetableFile);
+      
+      const response = await fetch(`http://localhost:5000/modules/${selectedModule}/timetable`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUploadMessage('Timetable uploaded successfully!');
+        setTimetableFile(null); // Reset the file picker
+        
+        // Update local state to instantly reflect the new status
+        setModules(prev => 
+          prev.map(m => m.moduleid === selectedModule ? { ...m, studenttimetablepath: 'uploaded_dummy_path' } : m)
+        );
+      } else {
+        setUploadMessage(data.error || 'Failed to upload timetable');
+      }
+    } catch (err) {
+      console.error(err);
+      setUploadMessage('Network error occurred during upload');
+    } finally {
+      setIsUploading(false);
+    }
   };
   
   return (
@@ -102,7 +151,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                     <div className="grid grid-cols-2 gap-[var(--space-md)] text-[var(--font-size-small)]">
                       <div>
                         <span className="text-[var(--color-text-secondary)]">Academic Year:</span>
-                        <span className="ml-2 font-medium">{module.academicYear}</span>
+                        <span className="ml-2 font-medium">{module.academicyear}</span>
                       </div>
                       <div>
                         <span className="text-[var(--color-text-secondary)]">Semester:</span>
@@ -110,19 +159,32 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                       </div>
                       <div className="col-span-2">
                         <span className="text-[var(--color-text-secondary)]">Sub-Coordinator:</span>
-                        <span className="ml-2 font-medium">{module.subCoordinator || 'Not assigned'}</span>
+                        <span className="ml-2 font-medium">{module.subcoordinator || 'Not assigned'}</span>
+                      </div>
+                      <div className="col-span-2 mt-2 pt-2 border-t border-gray-200 flex items-center gap-2">
+                        <span className="text-[var(--color-text-secondary)]">Timetable Status:</span>
+                        {module.studenttimetablepath ? (
+                          <span className="px-2 py-1 bg-[#D1FAE5] text-[#065F46] rounded-full text-xs font-bold flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Uploaded
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-bold">
+                            Not Uploaded
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                   
                   {/* Assigned Lecturers */}
-                  {module.lecturers.length > 0 && (
+                  {module.lecturers && module.lecturers.length > 0 && (
                     <div className="mt-[var(--space-lg)] p-[var(--space-lg)] bg-[var(--color-bg-main)] rounded-lg">
                       <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
-                        Assigned Lecturers ({module.lecturers.length})
+                        Assigned Lecturers ({module.lecturers ? module.lecturers.length : 0})
                       </h3>
                       <div className="space-y-[var(--space-sm)]">
-                        {module.lecturers.map((lecturer, index) => (
+                        {(module.lecturers || []).map((lecturer: string, index: number) => (
                           <div 
                             key={index}
                             className="flex items-center justify-between p-[var(--space-md)] bg-white rounded-lg"
@@ -166,9 +228,15 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
               
               {timetableFile && (
                 <div className="mt-[var(--space-md)]">
-                  <Button variant="primary" size="md">
-                    Process & Validate Timetable
+                  <Button variant="primary" size="md" onClick={handleUploadTimetable} disabled={isUploading}>
+                    {isUploading ? 'Uploading...' : 'Process & Validate Timetable'}
                   </Button>
+                </div>
+              )}
+              
+              {uploadMessage && (
+                <div className={`mt-[var(--space-md)] p-[var(--space-sm)] rounded-lg text-[var(--font-size-small)] font-medium ${uploadMessage.includes('successfully') ? 'text-[var(--color-success)] bg-[#D1FAE5]' : 'text-[var(--color-error)] bg-[#FEE2E2]'}`}>
+                  {uploadMessage}
                 </div>
               )}
               
