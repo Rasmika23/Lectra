@@ -4,6 +4,7 @@ import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
+import { authHeaders } from '../lib/api';
 
 interface CreateUserPageProps {
   currentUser: any;
@@ -32,9 +33,9 @@ export function CreateUserPage({ currentUser, onNavigate, onLogout }: CreateUser
     try {
       const response = await fetch('http://localhost:5000/users/invite', {
         method: 'POST',
-        headers: {
+        headers: authHeaders({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({ email, role }),
       });
 

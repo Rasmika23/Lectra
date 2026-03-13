@@ -3,6 +3,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
 import { Users, Search, Trash2, Shield, Mail, Calendar, UserPlus } from 'lucide-react';
+import { authHeaders } from '../lib/api';
 
 interface User {
     id: string;
@@ -33,7 +34,7 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
 
     const fetchUsers = async () => {
         try {
-            const response = await fetch('http://localhost:5000/users');
+            const response = await fetch('http://localhost:5000/users', { headers: authHeaders() });
             if (response.ok) {
                 const data = await response.json();
                 setUsers(data);
@@ -54,6 +55,7 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
         try {
             const response = await fetch(`http://localhost:5000/users/${id}`, {
                 method: 'DELETE',
+                headers: authHeaders(),
             });
 
             if (response.ok) {

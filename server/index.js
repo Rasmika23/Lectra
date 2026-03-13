@@ -9,6 +9,18 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// ── JWT Auth Middleware ─────────────────────────────────────────────────────
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+}
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -201,7 +213,7 @@ app.post('/users/setup', async (req, res) => {
 // --- Users Management Endpoints ---
 
 // Get all users
-app.get('/users', async (req, res) => {
+app.get('/users', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT 
@@ -252,7 +264,7 @@ app.get('/users', async (req, res) => {
 });
 
 // Delete user
-app.delete('/users/:id', async (req, res) => {
+app.delete('/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -275,7 +287,7 @@ app.get('/', (req, res) => {
 });
 
 // Get all modules with assignments
-app.get('/modules', async (req, res) => {
+app.get('/modules', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT 
@@ -285,6 +297,11 @@ app.get('/modules', async (req, res) => {
         m.academicyear, 
         m.semester, 
         m.studenttimetablepath,
+        m.default_day,
+        m.default_time,
+        m.default_end_time,
+        m.reminder_hours,
+        m.reminder_template,
         u_sub.name as subcoordinator,
         u_sub.userid as subcoordinatorid,
         (
@@ -306,7 +323,7 @@ app.get('/modules', async (req, res) => {
 });
 
 // Create new module
-app.post('/modules', async (req, res) => {
+app.post('/modules', authenticateToken, async (req, res) => {
   const { moduleCode, moduleName, academicYear, semester } = req.body;
   try {
     const result = await db.query(
@@ -321,7 +338,7 @@ app.post('/modules', async (req, res) => {
 });
 
 // Assign sub-coordinator to module
-app.patch('/modules/:id/assign-subcoordinator', async (req, res) => {
+app.patch('/modules/:id/assign-subcoordinator', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { subcoordinatorId } = req.body;
   
@@ -358,7 +375,7 @@ app.patch('/modules/:id/assign-subcoordinator', async (req, res) => {
 });
 
 // Unassign sub-coordinator from module
-app.patch('/modules/:id/unassign-subcoordinator', async (req, res) => {
+app.patch('/modules/:id/unassign-subcoordinator', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
@@ -374,7 +391,7 @@ app.patch('/modules/:id/unassign-subcoordinator', async (req, res) => {
 });
 
 // Unassign a single lecturer from module
-app.delete('/modules/:id/lecturers/:lecturerId', async (req, res) => {
+app.delete('/modules/:id/lecturers/:lecturerId', authenticateToken, async (req, res) => {
   const { id, lecturerId } = req.params;
   try {
     await db.query(
@@ -389,7 +406,7 @@ app.delete('/modules/:id/lecturers/:lecturerId', async (req, res) => {
 });
 
 // Add a single lecturer to module
-app.post('/modules/:id/lecturers', async (req, res) => {
+app.post('/modules/:id/lecturers', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { lecturerId } = req.body;
   try {
@@ -404,8 +421,44 @@ app.post('/modules/:id/lecturers', async (req, res) => {
   }
 });
 
+// Update module settings
+app.patch('/modules/:id/settings', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { defaultDay, defaultTime, defaultEndTime, reminderHours, reminderTemplate } = req.body;
+  
+  try {
+    const moduleId = parseInt(id);
+    if (isNaN(moduleId)) return res.status(400).json({ error: 'Invalid module ID' });
+
+    // Check if the current user is the sub-coordinator assigned to this module
+    const moduleCheck = await db.query('SELECT subcoordinatorid FROM module WHERE moduleid = $1', [moduleId]);
+    if (moduleCheck.rows.length === 0) return res.status(404).json({ error: 'Module not found' });
+    
+    // Only assigned sub-coordinator can edit (Main Coordinator handled by role if needed, but per request only sub-co)
+    if (req.user.role !== 'main-coordinator' && moduleCheck.rows[0].subcoordinatorid !== req.user.id) {
+        return res.status(403).json({ error: 'Only the assigned sub-coordinator can modify settings' });
+    }
+
+    const result = await db.query(
+      `UPDATE module SET 
+        default_day = $1, 
+        default_time = $2, 
+        default_end_time = $3, 
+        reminder_hours = $4, 
+        reminder_template = $5 
+       WHERE moduleid = $6 RETURNING *`,
+      [defaultDay, defaultTime, defaultEndTime, reminderHours, reminderTemplate, moduleId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating module settings:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
 // Assign lecturers to module
-app.post('/modules/:id/assign-lecturers', async (req, res) => {
+app.post('/modules/:id/assign-lecturers', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { lecturerIds } = req.body; // Array of IDs
   console.log(`Assigning lecturers ${JSON.stringify(lecturerIds)} to module ${id}`);
@@ -444,7 +497,7 @@ app.post('/modules/:id/assign-lecturers', async (req, res) => {
 });
 
 // Rescheduling available slots endpoint
-app.get('/sessions/available-slots', async (req, res) => {
+app.get('/sessions/available-slots', authenticateToken, async (req, res) => {
   try {
     const { sessionId, durationHours, weekOffset } = req.query;
     if (!sessionId || !durationHours || weekOffset === undefined) {
@@ -463,7 +516,7 @@ app.get('/sessions/available-slots', async (req, res) => {
 });
 
 // Upload timetable endpoint
-app.post('/modules/:moduleId/timetable', upload.single('timetable'), async (req, res) => {
+app.post('/modules/:moduleId/timetable', authenticateToken, upload.single('timetable'), async (req, res) => {
   try {
     const { moduleId } = req.params;
     

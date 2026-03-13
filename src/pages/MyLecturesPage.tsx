@@ -6,6 +6,7 @@ import { Modal } from '../components/Modal';
 import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mockSessions, mockModules, mockStudentTimetable } from '../lib/mockData';
 import { StatusBadge } from '../components/StatusBadge';
+import { authHeaders } from '../lib/api';
 
 interface MyLecturesPageProps {
     currentUser: any;
@@ -118,7 +119,9 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
             // In full production, session.id would just be the database sessionid.
             const sessionIdStr = reschedulingSession.id.toString().includes('test-session') ? '1' : reschedulingSession.id;
             
-            fetch(`http://localhost:5000/sessions/available-slots?sessionId=${sessionIdStr}&durationHours=${duration}&weekOffset=${selectedWeek}`)
+            fetch(`http://localhost:5000/sessions/available-slots?sessionId=${sessionIdStr}&durationHours=${duration}&weekOffset=${selectedWeek}`, {
+                headers: authHeaders()
+            })
                 .then(res => res.json())
                 .then(data => {
                     setAvailableSlotsGrid(Array.isArray(data) ? data : []);

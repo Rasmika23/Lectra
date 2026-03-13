@@ -7,9 +7,10 @@ import { FileUpload } from '../components/FileUpload';
 import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
-  UserX, UserCheck
+  UserX, UserCheck, Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { authHeaders } from '../lib/api';
 
 interface Lecturer { id: number; name: string; }
 interface Module {
@@ -22,6 +23,11 @@ interface Module {
   subcoordinator?: string;
   subcoordinatorid?: number;
   lecturers?: Lecturer[];
+  default_day?: string;
+  default_time?: string;
+  default_end_time?: string;
+  reminder_hours?: number;
+  reminder_template?: string;
 }
 interface SystemUser {
   userid: number;
@@ -63,6 +69,14 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [timetableFile, setTimetableFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Settings state (local for editing)
+  const [defaultDay, setDefaultDay] = useState('');
+  const [defaultTime, setDefaultTime] = useState('');
+  const [defaultEndTime, setDefaultEndTime] = useState('');
+  const [reminderHours, setReminderHours] = useState('48');
+  const [reminderTemplate, setReminderTemplate] = useState('');
 
   const isMainCoordinator = currentUser.role === 'main-coordinator';
   const isSubCoordinator = currentUser.role === 'sub-coordinator';
@@ -74,8 +88,8 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const fetchData = async () => {
     try {
       const [modRes, usersRes] = await Promise.all([
-        fetch(`${API}/modules`),
-        fetch(`${API}/users`),
+        fetch(`${API}/modules`, { headers: authHeaders() }),
+        fetch(`${API}/users`, { headers: authHeaders() }),
       ]);
       if (!modRes.ok || !usersRes.ok) throw new Error('Fetch failed');
       const modsData: Module[] = await modRes.json();
@@ -109,6 +123,16 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     setSelectedLecturerId('');
     setUploadMessage('');
     setTimetableFile(null);
+    
+    // Populate settings
+    const mod = modules.find(m => m.moduleid === moduleId);
+    if (mod) {
+      setDefaultDay(mod.default_day || 'Monday');
+      setDefaultTime(mod.default_time || '08:00');
+      setDefaultEndTime(mod.default_end_time || '10:00');
+      setReminderHours(String(mod.reminder_hours || '48'));
+      setReminderTemplate(mod.reminder_template || 'Dear [Lecturer Name],\n\nThis is a friendly reminder that you have an upcoming lecture session:\n\nModule: [Module Code] - [Module Name]\nDate: [Date]\nTime: [Start Time] - [End Time]\nLocation: [Location]\n\nPlease ensure you are prepared. If you need to reschedule, please use the Lectra system as soon as possible.\n\nBest regards,\nLectra System');
+    }
   };
 
   // ── CREATE MODULE ──────────────────────────────────────────────────────────
@@ -117,7 +141,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ moduleCode: newModuleCode, moduleName: newModuleName, academicYear: newAcademicYear, semester: newSemester }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
@@ -136,7 +160,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/assign-subcoordinator`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ subcoordinatorId: parseInt(selectedSubcoId) }),
       });
       const data = await res.json();
@@ -152,7 +176,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     if (!selectedModuleId) return;
     setSubcoLoading(true);
     try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/unassign-subcoordinator`, { method: 'PATCH' });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/unassign-subcoordinator`, { 
+        method: 'PATCH',
+        headers: authHeaders()
+      });
       if (!res.ok) throw new Error('Failed to unassign');
       toast.success('Sub-Coordinator unassigned');
       await fetchData();
@@ -167,7 +194,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ lecturerId: parseInt(selectedLecturerId) }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
@@ -181,7 +208,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const handleRemoveLecturer = async (lecturerId: number) => {
     if (!selectedModuleId) return;
     try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers/${lecturerId}`, { method: 'DELETE' });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers/${lecturerId}`, { 
+        method: 'DELETE',
+        headers: authHeaders()
+      });
       if (!res.ok) throw new Error('Failed to remove');
       toast.success('Lecturer removed');
       await fetchData();
@@ -196,7 +226,11 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const formData = new FormData();
       formData.append('timetable', timetableFile);
-      const res = await fetch(`${API}/modules/${selectedModuleId}/timetable`, { method: 'POST', body: formData });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/timetable`, { 
+        method: 'POST', 
+        headers: authHeaders(),
+        body: formData 
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       setUploadMessage('Timetable uploaded successfully!');
@@ -206,6 +240,28 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     finally { setIsUploading(false); }
   };
 
+  const handleSaveSettings = async () => {
+    if (!selectedModuleId) return;
+    setIsSavingSettings(true);
+    try {
+      const res = await fetch(`${API}/modules/${selectedModuleId}/settings`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          defaultDay,
+          defaultTime,
+          defaultEndTime,
+          reminderHours: parseInt(reminderHours),
+          reminderTemplate
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
+      toast.success('Settings saved successfully!');
+      await fetchData();
+    } catch (err: any) { toast.error(err.message); }
+    finally { setIsSavingSettings(false); }
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   // MODULE LIST VIEW
   // ═══════════════════════════════════════════════════════════════════════════
@@ -213,8 +269,8 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     const displayModules = isMainCoordinator
       ? modules
       : modules.filter(m =>
-          m.subcoordinatorid === currentUser.userid ||
-          (m.lecturers || []).some(l => l.id === currentUser.userid)
+          m.subcoordinatorid === currentUser.id ||
+          (m.lecturers || []).some(l => l.id === currentUser.id)
         );
 
     return (
@@ -512,6 +568,97 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
             )
           )}
         </Card>
+        
+        {/* ── MODULE SETTINGS (Sub-Coordinator only) ── */}
+        {(isSubCoordinator || isMainCoordinator) && (
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="w-5 h-5 text-[var(--color-primary)]" />
+              <h2 className="font-bold text-[var(--color-text-primary)]">Module Settings</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <Select
+                label="Default Day"
+                options={[
+                  { value: 'Monday', label: 'Monday' },
+                  { value: 'Tuesday', label: 'Tuesday' },
+                  { value: 'Wednesday', label: 'Wednesday' },
+                  { value: 'Thursday', label: 'Thursday' },
+                  { value: 'Friday', label: 'Friday' },
+                  { value: 'Saturday', label: 'Saturday' },
+                  { value: 'Sunday', label: 'Sunday' },
+                ]}
+                value={defaultDay}
+                onChange={e => setDefaultDay(e.target.value)}
+                disabled={!isSubCoordinator || module.subcoordinatorid !== currentUser.id}
+                fullWidth
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label="Start Time"
+                  type="time"
+                  value={defaultTime}
+                  onChange={e => setDefaultTime(e.target.value)}
+                  disabled={!isSubCoordinator || module.subcoordinatorid !== currentUser.id}
+                  fullWidth
+                />
+                <Input
+                  label="End Time"
+                  type="time"
+                  value={defaultEndTime}
+                  onChange={e => setDefaultEndTime(e.target.value)}
+                  disabled={!isSubCoordinator || module.subcoordinatorid !== currentUser.id}
+                  fullWidth
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t pt-4">
+              <h3 className="text-sm font-bold text-[var(--color-text-primary)]">Reminder Settings</h3>
+              <Select
+                label="Reminder Timing"
+                options={[
+                  { value: '24', label: '24 hours before' },
+                  { value: '48', label: '48 hours before' },
+                  { value: '72', label: '72 hours before' },
+                ]}
+                value={reminderHours}
+                onChange={e => setReminderHours(e.target.value)}
+                disabled={!isSubCoordinator || module.subcoordinatorid !== currentUser.id}
+                fullWidth
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Template</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all min-h-[150px]"
+                  value={reminderTemplate}
+                  onChange={e => setReminderTemplate(e.target.value)}
+                  disabled={!isSubCoordinator || module.subcoordinatorid !== currentUser.id}
+                  placeholder="Enter reminder message template..."
+                />
+                <p className="mt-1 text-xs text-gray-400">Available placeholders: [Lecturer Name], [Module Code], [Module Name], [Date], [Start Time], [End Time], [Location]</p>
+              </div>
+            </div>
+
+            {isSubCoordinator && module.subcoordinatorid === currentUser.id && (
+              <Button
+                variant="primary"
+                className="mt-6"
+                onClick={handleSaveSettings}
+                disabled={isSavingSettings}
+              >
+                {isSavingSettings ? 'Saving...' : 'Save All Settings'}
+              </Button>
+            )}
+            
+            {isMainCoordinator && (
+              <p className="mt-4 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                Note: Only the assigned sub-coordinator can modify these settings.
+              </p>
+            )}
+          </Card>
+        )}
 
         {/* ── TIMETABLE (Sub-Coordinator only) ── */}
         {isSubCoordinator && (
