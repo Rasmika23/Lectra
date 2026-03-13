@@ -33,7 +33,7 @@ export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProp
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'main-dashboard' },
           { label: 'User Management', icon: <Users className="w-5 h-5" />, href: 'user-management' },
-          { label: 'Create Module', icon: <BookOpen className="w-5 h-5" />, href: 'create-module' },
+          { label: 'Module Management', icon: <Settings className="w-5 h-5" />, href: 'module-management' },
           { label: 'Reports', icon: <FileText className="w-5 h-5" />, href: 'reports' },
         ];
       case 'sub-coordinator':
