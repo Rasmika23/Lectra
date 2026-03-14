@@ -292,22 +292,26 @@ app.get('/modules/:id/sessions', async (req, res) => {
         s.moduleid,
         m.modulecode,
         m.modulename,
-        s.userid as lecturerid,
-        s.scheduleddate as date,
-        s.starttime as time,
+        s.lecturerid,
+        s.datetime as "datetime",
+        to_char(s.datetime, 'YYYY-MM-DD') as date,
+        to_char(s.datetime, 'HH24:MI') as time,
         s.duration,
         s.locationorurl as location,
-        s.status
+        s.status,
+        s.mode,
+        u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE s.moduleid = $1
     `;
     const params = [parseInt(id)];
     if (lecturerId) {
-      query += ` AND s.userid = $2`;
+      query += ` AND (s.lecturerid = $2 OR s.lecturerid IS NULL)`;
       params.push(parseInt(lecturerId));
     }
-    query += ` ORDER BY s.scheduleddate ASC, s.starttime ASC`;
+    query += ` ORDER BY s.datetime ASC`;
     const result = await db.query(query, params);
     res.json(result.rows);
   } catch (err) {
@@ -339,6 +343,151 @@ app.get('/', (req, res) => {
   res.send('Lectra API is running');
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE SCHEDULE (weekly recurring slots → auto-generate sessions)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Generate/regenerate future sessions for a module from its schedule slots.
+ * - Deletes sessions WHERE scheduleddate >= TODAY
+ * - Creates one session per week per slot until semesterenddate
+ */
+async function generateSessionsForModule(moduleId) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Get semester end date
+  const modRes = await db.query('SELECT semesterenddate FROM module WHERE moduleid = $1', [moduleId]);
+  if (!modRes.rows.length) return;
+  const endDate = modRes.rows[0].semesterenddate;
+  if (!endDate) return;
+
+  // Delete future sessions for this module
+  await db.query(
+    "DELETE FROM session WHERE moduleid = $1 AND datetime >= $2",
+    [moduleId, today]
+  );
+
+  // Get all schedule slots
+  const slotsRes = await db.query(
+    'SELECT * FROM moduleschedule WHERE moduleid = $1',
+    [moduleId]
+  );
+  if (!slotsRes.rows.length) return;
+
+  const dayMap = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 0 };
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  for (const slot of slotsRes.rows) {
+    const targetDay = dayMap[slot.day];
+    if (targetDay === undefined) continue;
+
+    const cur = new Date(today);
+    const curDay = cur.getDay();
+    let daysUntilTarget = (targetDay - curDay + 7) % 7;
+    cur.setDate(cur.getDate() + daysUntilTarget);
+
+    while (cur <= end) {
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      const dateTimeStr = `${dateStr} ${slot.starttime}`;
+      
+      await db.query(
+        `INSERT INTO session (moduleid, datetime, duration, locationorurl, status, mode)
+         VALUES ($1, $2, $3, $4, 'Scheduled', 'Physical')`,
+        [moduleId, dateTimeStr, slot.duration, slot.location || '']
+      );
+      cur.setDate(cur.getDate() + 7);
+    }
+  }
+}
+
+// GET /modules/:id/schedule — get all schedule slots
+app.get('/modules/:id/schedule', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [slotsRes, modRes] = await Promise.all([
+      db.query('SELECT * FROM moduleschedule WHERE moduleid = $1 ORDER BY scheduleid', [parseInt(id)]),
+      db.query('SELECT semesterenddate FROM module WHERE moduleid = $1', [parseInt(id)]),
+    ]);
+    res.json({
+      slots: slotsRes.rows,
+      semesterenddate: modRes.rows[0]?.semesterenddate || null,
+    });
+  } catch (err) {
+    console.error('Error fetching schedule:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /modules/:id/schedule — add a new slot (sub-coordinator)
+app.post('/modules/:id/schedule', async (req, res) => {
+  const { id } = req.params;
+  const { day, starttime, duration, location } = req.body;
+  if (!day || !starttime || !duration) {
+    return res.status(400).json({ error: 'day, starttime, and duration are required' });
+  }
+  try {
+    const result = await db.query(
+      'INSERT INTO moduleschedule (moduleid, day, starttime, duration, location) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [parseInt(id), day, starttime, parseFloat(duration), location || '']
+    );
+    await generateSessionsForModule(parseInt(id));
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding schedule slot:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+// PUT /modules/:id/schedule/:slotId — update a slot (sub-coordinator)
+app.put('/modules/:id/schedule/:slotId', async (req, res) => {
+  const { id, slotId } = req.params;
+  const { day, starttime, duration, location } = req.body;
+  try {
+    const result = await db.query(
+      'UPDATE moduleschedule SET day=$1, starttime=$2, duration=$3, location=$4 WHERE scheduleid=$5 AND moduleid=$6 RETURNING *',
+      [day, starttime, parseFloat(duration), location || '', parseInt(slotId), parseInt(id)]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Slot not found' });
+    await generateSessionsForModule(parseInt(id));
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating slot:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+// DELETE /modules/:id/schedule/:slotId — delete a slot (sub-coordinator)
+app.delete('/modules/:id/schedule/:slotId', async (req, res) => {
+  const { id, slotId } = req.params;
+  try {
+    await db.query('DELETE FROM moduleschedule WHERE scheduleid=$1 AND moduleid=$2', [parseInt(slotId), parseInt(id)]);
+    await generateSessionsForModule(parseInt(id));
+    res.json({ message: 'Slot deleted and sessions regenerated' });
+  } catch (err) {
+    console.error('Error deleting slot:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /modules/:id/semesterenddate — update semester end date (sub-coordinator)
+app.put('/modules/:id/semesterenddate', async (req, res) => {
+  const { id } = req.params;
+  const { semesterenddate } = req.body;
+  try {
+    await db.query('UPDATE module SET semesterenddate=$1 WHERE moduleid=$2', [semesterenddate || null, parseInt(id)]);
+    await generateSessionsForModule(parseInt(id));
+    res.json({ message: 'Semester end date updated and sessions regenerated' });
+  } catch (err) {
+    console.error('Error updating semester end date:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get all modules with assignments
 app.get('/modules', authenticateToken, async (req, res) => {
   try {
@@ -350,11 +499,7 @@ app.get('/modules', authenticateToken, async (req, res) => {
         m.academicyear, 
         m.semester, 
         m.studenttimetablepath,
-        m.default_day,
-        m.default_time,
-        m.default_end_time,
-        m.reminder_hours,
-        m.reminder_template,
+        m.semesterenddate,
         u_sub.name as subcoordinator,
         u_sub.userid as subcoordinatorid,
         (

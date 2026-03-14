@@ -64,7 +64,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
     useEffect(() => {
         if (!lecturerId) return;
         setLoadingModules(true);
-        fetch(`${API}/lecturers/${lecturerId}/modules`)
+        fetch(`${API}/lecturers/${lecturerId}/modules`, { headers: authHeaders() })
             .then(r => r.json())
             .then(data => {
                 setModules(Array.isArray(data) ? data : []);
@@ -80,7 +80,9 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
     useEffect(() => {
         if (!selectedModule) { setSessions([]); return; }
         setLoadingSessions(true);
-        fetch(`${API}/modules/${selectedModule.moduleid}/sessions?lecturerId=${lecturerId}`)
+        fetch(`${API}/modules/${selectedModule.moduleid}/sessions?lecturerId=${lecturerId}`, {
+            headers: authHeaders()
+        })
             .then(r => r.json())
             .then(data => {
                 setSessions(Array.isArray(data) ? data : []);
@@ -113,8 +115,13 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         }
     }, [duration, selectedWeek, reschedulingSession]);
 
-    const upcomingSessions = sessions.filter(s => s.status === 'scheduled' || s.status === 'upcoming');
-    const completedSessions = sessions.filter(s => s.status === 'completed');
+    const upcomingSessions = sessions.filter(s => 
+        s.status?.toLowerCase() === 'scheduled' || 
+        s.status?.toLowerCase() === 'upcoming'
+    );
+    const completedSessions = sessions.filter(s => 
+        s.status?.toLowerCase() === 'completed'
+    );
 
     const formatDate = (dateString: string) => {
         if (!dateString) return 'TBD';
