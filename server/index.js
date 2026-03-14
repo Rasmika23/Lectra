@@ -263,6 +263,59 @@ app.get('/users', authenticateToken, async (req, res) => {
   }
 });
 
+// Get modules assigned to a specific lecturer
+app.get('/lecturers/:id/modules', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(`
+      SELECT m.moduleid, m.modulecode, m.modulename, m.academicyear, m.semester
+      FROM module m
+      JOIN modulelecturer ml ON m.moduleid = ml.moduleid
+      WHERE ml.lecturerid = $1
+      ORDER BY m.academicyear DESC, m.semester, m.modulecode
+    `, [parseInt(id)]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching lecturer modules:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get sessions for a specific module and lecturer
+app.get('/modules/:id/sessions', async (req, res) => {
+  const { id } = req.params;
+  const { lecturerId } = req.query;
+  try {
+    let query = `
+      SELECT 
+        s.sessionid as id,
+        s.moduleid,
+        m.modulecode,
+        m.modulename,
+        s.userid as lecturerid,
+        s.scheduleddate as date,
+        s.starttime as time,
+        s.duration,
+        s.locationorurl as location,
+        s.status
+      FROM session s
+      JOIN module m ON s.moduleid = m.moduleid
+      WHERE s.moduleid = $1
+    `;
+    const params = [parseInt(id)];
+    if (lecturerId) {
+      query += ` AND s.userid = $2`;
+      params.push(parseInt(lecturerId));
+    }
+    query += ` ORDER BY s.scheduleddate ASC, s.starttime ASC`;
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching module sessions:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Delete user
 app.delete('/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
