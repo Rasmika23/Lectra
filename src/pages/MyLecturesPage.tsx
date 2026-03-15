@@ -5,6 +5,7 @@ import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, ArrowLeft, BookOpen } from 'lucide-react';
 import { authHeaders } from '../lib/api';
+import { toast } from 'sonner';
 
 const API = 'http://localhost:5000';
 
@@ -76,22 +77,26 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
             });
     }, [lecturerId]);
 
+    const fetchSessions = async () => {
+        if (!selectedModule) return;
+        setLoadingSessions(true);
+        try {
+            const r = await fetch(`${API}/modules/${selectedModule.moduleid}/sessions?lecturerId=${lecturerId}`, {
+                headers: authHeaders()
+            });
+            const data = await r.json();
+            setSessions(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('Failed to fetch sessions', err);
+        } finally {
+            setLoadingSessions(false);
+        }
+    };
+
     // Fetch sessions when a module is selected
     useEffect(() => {
         if (!selectedModule) { setSessions([]); return; }
-        setLoadingSessions(true);
-        fetch(`${API}/modules/${selectedModule.moduleid}/sessions?lecturerId=${lecturerId}`, {
-            headers: authHeaders()
-        })
-            .then(r => r.json())
-            .then(data => {
-                setSessions(Array.isArray(data) ? data : []);
-                setLoadingSessions(false);
-            })
-            .catch(err => {
-                console.error('Failed to fetch sessions', err);
-                setLoadingSessions(false);
-            });
+        fetchSessions();
     }, [selectedModule, lecturerId]);
 
     // Fetch available slots for rescheduling
@@ -117,7 +122,8 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
 
     const upcomingSessions = sessions.filter(s => 
         s.status?.toLowerCase() === 'scheduled' || 
-        s.status?.toLowerCase() === 'upcoming'
+        s.status?.toLowerCase() === 'upcoming' ||
+        s.status?.toLowerCase() === 'rescheduled'
     );
     const completedSessions = sessions.filter(s => 
         s.status?.toLowerCase() === 'completed'
@@ -142,11 +148,11 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         return sessionDate <= twoDaysFromNow && sessionDate >= new Date();
     };
 
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const timeSlots = availableSlotsGrid.length > 0 ? availableSlotsGrid[0].slots.map((s: any) => s.time) : [];
 
     const getWeekDates = () => {
-        if (availableSlotsGrid.length === 0) return ['', '', '', '', ''];
+        if (availableSlotsGrid.length === 0) return ['', '', '', '', '', '', ''];
         return availableSlotsGrid.map(d => new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
     };
 
@@ -176,12 +182,40 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         }
     };
 
-    const handleConfirmReschedule = () => {
-        setShowConfirmModal(false);
-        setReschedulingSession(null);
-        setSelectedSlot(null);
-        setDuration('');
-        alert('Session rescheduled successfully!');
+    const handleConfirmReschedule = async () => {
+        if (!reschedulingSession || !selectedSlot) return;
+
+        const dayObj = availableSlotsGrid.find(d => d.day === selectedSlot.day);
+        if (!dayObj) return;
+
+        const newDateTime = `${dayObj.date} ${selectedSlot.time}`;
+        
+        try {
+            const res = await fetch(`${API}/sessions/${reschedulingSession.id}`, {
+                method: 'PATCH',
+                headers: {
+                    ...authHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    datetime: newDateTime,
+                    duration: duration,
+                    location: reschedulingSession.location || ''
+                })
+            });
+
+            if (!res.ok) throw new Error('Reschedule failed');
+
+            toast.success('Session rescheduled successfully!');
+            setShowConfirmModal(false);
+            setReschedulingSession(null);
+            setSelectedSlot(null);
+            setDuration('');
+            fetchSessions(); // Refresh list
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to reschedule session');
+        }
     };
 
     const weekDates = getWeekDates();
@@ -272,7 +306,9 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                                     <h3 className="font-bold text-[var(--color-text-primary)] text-[var(--font-size-h3)]">
                                                                         {session.modulecode}
                                                                     </h3>
-                                                                    <StatusBadge status="warning">Upcoming</StatusBadge>
+                                                                    <StatusBadge status={session.status?.toLowerCase() === 'rescheduled' ? 'info' : 'warning'}>
+                                                                        {session.status}
+                                                                    </StatusBadge>
                                                                 </div>
                                                                 <p className="text-[var(--color-text-secondary)]">{session.modulename}</p>
                                                             </div>

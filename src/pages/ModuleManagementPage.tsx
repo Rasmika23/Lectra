@@ -102,7 +102,9 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
 
   const fetchSchedule = async (moduleId: number) => {
     try {
-      const res = await fetch(`${API}/modules/${moduleId}/schedule`);
+      const res = await fetch(`${API}/modules/${moduleId}/schedule`, {
+        headers: authHeaders()
+      });
       const data = await res.json();
       setScheduleSlots(data.slots || []);
       setSemesterEndDate(data.semesterenddate ? String(data.semesterenddate).split('T')[0] : '');
@@ -135,7 +137,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ moduleCode: newModuleCode, moduleName: newModuleName, academicYear: newAcademicYear, semester: newSemester }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
@@ -153,7 +155,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/assign-subcoordinator`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ subcoordinatorId: parseInt(selectedSubcoId) }),
       });
       const data = await res.json();
@@ -169,7 +171,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     if (!selectedModuleId) return;
     setSubcoLoading(true);
     try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/unassign-subcoordinator`, { method: 'PATCH' });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/unassign-subcoordinator`, { 
+        method: 'PATCH',
+        headers: authHeaders()
+      });
       if (!res.ok) throw new Error('Failed to unassign');
       toast.success('Sub-Coordinator unassigned');
       await fetchData();
@@ -184,7 +189,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ lecturerId: parseInt(selectedLecturerId) }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
@@ -198,7 +203,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const handleRemoveLecturer = async (lecturerId: number) => {
     if (!selectedModuleId) return;
     try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers/${lecturerId}`, { method: 'DELETE' });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers/${lecturerId}`, { 
+        method: 'DELETE',
+        headers: authHeaders()
+      });
       if (!res.ok) throw new Error('Failed to remove');
       toast.success('Lecturer removed');
       await fetchData();
@@ -212,7 +220,11 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const formData = new FormData();
       formData.append('timetable', timetableFile);
-      const res = await fetch(`${API}/modules/${selectedModuleId}/timetable`, { method: 'POST', body: formData });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/timetable`, { 
+        method: 'POST', 
+        body: formData,
+        headers: authHeaders()
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       setUploadMessage('Timetable uploaded successfully!');
@@ -228,7 +240,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/semesterenddate`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ semesterenddate: semesterEndDate }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -244,7 +256,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/schedule`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ day: newSlotDay, starttime: newSlotTime, duration: newSlotDuration, location: newSlotLocation }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -260,7 +272,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/schedule/${slotId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(editSlot),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -274,7 +286,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const handleDeleteSlot = async (slotId: number) => {
     setScheduleLoading(true);
     try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/schedule/${slotId}`, { method: 'DELETE' });
+      const res = await fetch(`${API}/modules/${selectedModuleId}/schedule/${slotId}`, { 
+        method: 'DELETE',
+        headers: authHeaders()
+      });
       if (!res.ok) throw new Error((await res.json()).error);
       toast.success('Slot removed and sessions updated');
       await fetchSchedule(selectedModuleId!);

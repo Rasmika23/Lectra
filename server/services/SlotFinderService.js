@@ -31,8 +31,8 @@ class SlotFinderService {
         const today = new Date();
         const targetWeekStart = addDays(startOfWeek(today, { weekStartsOn: 1 }), weekOffset * 7);
 
-        // 3. Initialize the 5-Day Grid
-        const daysArr = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        // 3. Initialize the 7-Day Grid (Mon-Sun)
+        const daysArr = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         let grid = daysArr.map((dayName, index) => {
             let currentDayStart = addDays(targetWeekStart, index);
             let slots = [];
@@ -40,11 +40,12 @@ class SlotFinderService {
             let slotTime = addMinutes(startOfDay(currentDayStart), 8 * 60); // 08:00 AM
 
             for (let i = 0; i < 20; i++) {
+                const isPast = slotTime < today;
                 slots.push({
                     time: format(slotTime, 'HH:mm'),
                     datetime: new Date(slotTime), // keep object for easier comparison later
-                    status: 'AVAILABLE',
-                    reason: null
+                    status: isPast ? 'UNAVAILABLE' : 'AVAILABLE',
+                    reason: isPast ? 'Past' : null
                 });
                 slotTime = addMinutes(slotTime, 30);
             }
@@ -53,7 +54,8 @@ class SlotFinderService {
 
         // 4. Parse Fixed Schedule (Excel)
         if (studenttimetablepath) {
-            const fullPath = path.resolve(__dirname, '..', '..', studenttimetablepath); // adjust path relative to server root
+            const fullPath = path.resolve(__dirname, '..', studenttimetablepath);
+            // console.log('--- SlotFinder: Checking timetable at:', fullPath);
             if (fs.existsSync(fullPath)) {
                 try {
                     const workbook = new ExcelJS.Workbook();
@@ -68,11 +70,18 @@ class SlotFinderService {
                     const dayColumns = {};
                     const headerRow = worksheet.getRow(1);
                     headerRow.eachCell((cell, colNumber) => {
-                        const val = cell.text.trim();
-                        if (daysArr.includes(val)) {
-                            dayColumns[val] = colNumber;
+                        const val = cell.text.trim().toLowerCase();
+                        // Support full names and common abbreviations
+                        const dayMatch = daysArr.find(d => 
+                           d.toLowerCase() === val || 
+                           d.toLowerCase().startsWith(val) ||
+                           val.startsWith(d.toLowerCase().substring(0,3))
+                        );
+                        if (dayMatch) {
+                            dayColumns[dayMatch] = colNumber;
                         }
                     });
+                     // console.log('--- SlotFinder: Detected day columns:', dayColumns);
 
                     // Iterate rows from row 2 onwards to check times
                     worksheet.eachRow((row, rowNumber) => {
@@ -80,22 +89,42 @@ class SlotFinderService {
                         let timeStr = '';
                         const timeCell = row.getCell(1); // Assume col 1 is Time
                         if (timeCell.value instanceof Date) {
-                            // Excel saves times relative to 1899-12-30 UTC. Extract EXACT hour/minute from UTC string
-                            timeStr = timeCell.value.toISOString().substring(11, 16);
+                            const hh = String(timeCell.value.getUTCHours()).padStart(2, '0');
+                            const mm = String(timeCell.value.getUTCMinutes()).padStart(2, '0');
+                            timeStr = `${hh}:${mm}`;
                         } else {
-                            timeStr = timeCell.text.trim();
+                            // Normalize text time (e.g., "08:00", "8:00 AM", "14.30")
+                            let raw = timeCell.text.trim().toLowerCase();
+                            if (!raw) return;
+                            
+                            // Replace . with :
+                            raw = raw.replace('.', ':');
+                            
+                            // Handle AM/PM
+                            let isPM = raw.includes('pm');
+                            let isAM = raw.includes('am');
+                            let timePart = raw.replace('am', '').replace('pm', '').trim();
+                            let parts = timePart.split(':');
+                            let h = parseInt(parts[0]);
+                            let m = parts.length > 1 ? parseInt(parts[1]) : 0;
+                            
+                            if (isPM && h < 12) h += 12;
+                            if (isAM && h === 12) h = 0;
+                            
+                            if (!isNaN(h)) {
+                                timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                            }
                         }
+
                         if (!timeStr) return;
 
-                        // Simple match for "HH:mm"
-                        // For each day column, check if we have a module name
+                        // Match against grid
                         for (const [dayName, colNumber] of Object.entries(dayColumns)) {
                             const moduleName = row.getCell(colNumber).text.trim();
                             if (moduleName) {
-                                // Find corresponding day and time in our grid
                                 const dayObj = grid.find(d => d.day === dayName);
                                 if (dayObj) {
-                                    const slotObj = dayObj.slots.find(s => s.time === timeStr);
+                                                                        const slotObj = dayObj.slots.find(s => s.time === timeStr);
                                     if (slotObj) {
                                         slotObj.status = 'BUSY';
                                         slotObj.reason = `Fixed Lecture (${moduleName})`;
@@ -112,14 +141,15 @@ class SlotFinderService {
         }
 
         // 5. Fetch Active Sessions for this 'batch' (same academic year & semester) + same lecturer
-        const targetWeekEnd = addDays(targetWeekStart, 5); // up to Saturday 00:00
+        const targetWeekEnd = addDays(targetWeekStart, 7); // up to next Monday 00:00
         const activeSessionsRes = await db.query(`
       SELECT s.datetime, s.status, s.sessionid, m.modulename, s.lecturerid as sess_lecturerid, s.duration
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
       WHERE (
         (m.academicyear = $1 AND m.semester = $2) -- Batch collision
-        OR s.lecturerid = $5 -- Lecturer collision
+        OR s.lecturerid = $5 -- Specific lecturer assignment
+        OR s.moduleid IN (SELECT moduleid FROM modulelecturer WHERE lecturerid = $5) -- Shared sessions for lecturer modules
       )
       AND s.status IN ('Scheduled', 'Rescheduled')
       AND s.datetime >= $3 AND s.datetime < $4

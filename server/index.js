@@ -320,6 +320,31 @@ app.get('/modules/:id/sessions', async (req, res) => {
   }
 });
 
+// Reschedule a session
+app.patch('/sessions/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { datetime, duration, location, lecturerid } = req.body;
+
+  try {
+    const result = await db.query(
+      `UPDATE session 
+       SET datetime = $1, duration = $2, locationorurl = $3, lecturerid = COALESCE($4, lecturerid), status = 'Rescheduled'
+       WHERE sessionid = $5 
+       RETURNING *`,
+      [datetime, duration, location, lecturerid || null, parseInt(id)]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error rescheduling session:', err);
+    res.status(500).json({ error: 'Server error updating session' });
+  }
+});
+
 // Delete user
 app.delete('/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -659,7 +684,7 @@ app.patch('/modules/:id/settings', authenticateToken, async (req, res) => {
 app.post('/modules/:id/assign-lecturers', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { lecturerIds } = req.body; // Array of IDs
-  console.log(`Assigning lecturers ${JSON.stringify(lecturerIds)} to module ${id}`);
+    // console.log(`Assigning lecturers ${JSON.stringify(lecturerIds)} to module ${id}`);
   
   try {
     const moduleId = parseInt(id);
@@ -685,7 +710,7 @@ app.post('/modules/:id/assign-lecturers', authenticateToken, async (req, res) =>
     }
     
     await db.query('COMMIT');
-    console.log(`Lecturers assigned successfully to module ${id}`);
+    // console.log(`Lecturers assigned successfully to module ${id}`);
     res.json({ message: 'Lecturers assigned successfully' });
   } catch (err) {
     await db.query('ROLLBACK');
