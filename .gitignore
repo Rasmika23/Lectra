@@ -1,1 +1,42 @@
-node_modules
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+build/
+dist/
+
+# Env & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor/System
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# WhatsApp Service (Cache/Auth)
+server/.wwebjs_auth/
+server/.wwebjs_cache/
+
+# Uploads
+server/uploads/*
+!server/uploads/.gitkeep
