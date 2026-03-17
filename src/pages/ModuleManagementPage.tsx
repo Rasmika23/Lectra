@@ -7,12 +7,12 @@ import { FileUpload } from '../components/FileUpload';
 import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
-  UserX, UserCheck, Clock
+  UserX, UserCheck, Clock, Bell
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
 
-interface Lecturer { id: number; name: string; }
+interface Lecturer { id: number; name: string; email?: string; wants_reminders?: boolean; }
 interface Module {
   moduleid: number;
   modulecode: string;
@@ -22,6 +22,8 @@ interface Module {
   studenttimetablepath?: string;
   subcoordinator?: string;
   subcoordinatorid?: number;
+  reminder_hours?: number;
+  reminder_template?: string;
   lecturers?: Lecturer[];
 }
 interface SystemUser {
@@ -48,6 +50,16 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [view, setView] = useState<'list' | 'detail'>('list');
 
+  // Reminder settings
+  const [reminderHours, setReminderHours] = useState('48');
+  const [reminderTemplate, setReminderTemplate] = useState('');
+  const [savingReminders, setSavingReminders] = useState(false);
+
+  // Custom Message state
+  const [customMessage, setCustomMessage] = useState('');
+  const [selectedMessageLecturers, setSelectedMessageLecturers] = useState<number[]>([]);
+  const [sendingMessage, setSendingMessage] = useState(false);
+
   // Create module state
   const [isCreating, setIsCreating] = useState(false);
   const [newModuleName, setNewModuleName] = useState('');
@@ -60,6 +72,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [subcoLoading, setSubcoLoading] = useState(false);
   const [selectedSubcoId, setSelectedSubcoId] = useState('');
   const [selectedLecturerId, setSelectedLecturerId] = useState('');
+  const [wantsReminders, setWantsReminders] = useState(true);
   const [lecturerLoading, setLecturerLoading] = useState(false);
 
   // Timetable upload
@@ -114,21 +127,42 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const module = modules.find(m => m.moduleid === selectedModuleId);
   const subCoordinators = users.filter(u => u.role === 'sub-coordinator');
   const allLecturers = users.filter(u => u.role === 'lecturer');
-  const assignedLecturers: Lecturer[] = (module?.lecturers || []).filter(l => l !== null);
+  
+  // We need to fetch the custom assigned lecturers array that includes wants_reminders. 
+  // For now, we use the property embedded in module if loaded properly, or fallback
+  const [assignedLecturers, setAssignedLecturers] = useState<Lecturer[]>([]);
   const assignedLecturerIds = assignedLecturers.map(l => l.id);
   const availableLecturers = allLecturers.filter(u => !assignedLecturerIds.includes(u.userid));
 
+  const fetchModuleLecturers = async (moduleId: number) => {
+    try {
+      const res = await fetch(`${API}/modules/${moduleId}/lecturers`, { headers: authHeaders() });
+      if (res.ok) {
+        setAssignedLecturers(await res.json());
+      }
+    } catch (e) { console.error('Failed to fetch module lecturers', e); }
+  };
+
   const openDetail = (moduleId: number) => {
+    const mod = modules.find(m => m.moduleid === moduleId);
     setSelectedModuleId(moduleId);
     setView('detail');
     setSubcoError('');
     setSelectedSubcoId('');
     setSelectedLecturerId('');
+    setWantsReminders(true);
     setUploadMessage('');
     setTimetableFile(null);
     setAddingSlot(false);
     setEditingSlotId(null);
+    setCustomMessage('');
+    setSelectedMessageLecturers([]);
+    
+    setReminderHours(mod?.reminder_hours ? String(mod.reminder_hours) : '48');
+    setReminderTemplate(mod?.reminder_template || '');
+
     fetchSchedule(moduleId);
+    fetchModuleLecturers(moduleId);
   };
 
   // ── CREATE MODULE ──────────────────────────────────────────────────────────
@@ -187,15 +221,21 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     if (!selectedLecturerId || !selectedModuleId) return;
     setLecturerLoading(true);
     try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/lecturers`, {
+      // Get all current assigned plus the new one
+      const lecturerIds = assignedLecturers.map(l => ({ id: l.id, wants_reminders: l.wants_reminders }));
+      lecturerIds.push({ id: parseInt(selectedLecturerId), wants_reminders: wantsReminders });
+
+      const res = await fetch(`${API}/modules/${selectedModuleId}/assign-lecturers`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ lecturerId: parseInt(selectedLecturerId) }),
+        body: JSON.stringify({ lecturerIds }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
       toast.success('Lecturer added!');
       setSelectedLecturerId('');
+      setWantsReminders(true);
       await fetchData();
+      await fetchModuleLecturers(selectedModuleId);
     } catch (err: any) { toast.error(err.message); }
     finally { setLecturerLoading(false); }
   };
@@ -210,6 +250,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
       if (!res.ok) throw new Error('Failed to remove');
       toast.success('Lecturer removed');
       await fetchData();
+      await fetchModuleLecturers(selectedModuleId);
     } catch (err: any) { toast.error(err.message); }
   };
 
@@ -232,6 +273,89 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
       await fetchData();
     } catch (err: any) { setUploadMessage('Error: ' + err.message); }
     finally { setIsUploading(false); }
+  };
+
+  // ── REMINDERS ──────────────────────────────────────────────────────────────
+  const handleSaveReminders = async () => {
+    if (!selectedModuleId) return;
+    setSavingReminders(true);
+    try {
+      const res = await fetch(`${API}/modules/${selectedModuleId}/settings`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ reminderHours: parseInt(reminderHours), reminderTemplate })
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success('Reminder settings saved!');
+      await fetchData();
+    } catch (err: any) {
+      toast.error('Failed to save reminder settings: ' + err.message);
+    } finally {
+      setSavingReminders(false);
+    }
+  };
+
+  const handleToggleLecturerReminder = async (lecturerId: number, currentStatus: boolean) => {
+    if (!selectedModuleId) return;
+    try {
+        const updatedLecturers = assignedLecturers.map(l => ({
+            id: l.id,
+            wants_reminders: l.id === lecturerId ? !currentStatus : l.wants_reminders
+        }));
+
+        const res = await fetch(`${API}/modules/${selectedModuleId}/assign-lecturers`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ lecturerIds: updatedLecturers }),
+        });
+        
+        if (!res.ok) throw new Error('Failed to update preference');
+        toast.success('Lecturer reminder preference updated');
+        await fetchModuleLecturers(selectedModuleId);
+    } catch (error: any) {
+        toast.error(error.message);
+    }
+  };
+
+  const handleSendCustomMessage = async () => {
+    if (!selectedModuleId || !customMessage.trim() || selectedMessageLecturers.length === 0) return;
+    setSendingMessage(true);
+    try {
+      const res = await fetch(`${API}/modules/${selectedModuleId}/send-message`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ lecturerIds: selectedMessageLecturers, messageText: customMessage }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send message');
+      toast.success('Messages dispatched successfully!');
+      if (data.stats) {
+          console.log('Dispatch Stats:', data.stats);
+          if (data.stats.errors.length > 0) {
+              toast.error(`${data.stats.errors.length} messages failed to send. check console.`);
+          }
+      }
+      setCustomMessage('');
+      setSelectedMessageLecturers([]);
+    } catch (err: any) {
+      toast.error('Failed to send messages: ' + err.message);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const toggleMessageLecturer = (id: number) => {
+      setSelectedMessageLecturers(prev => 
+          prev.includes(id) ? prev.filter(lId => lId !== id) : [...prev, id]
+      );
+  };
+
+  const toggleAllMessageLecturers = () => {
+      if (selectedMessageLecturers.length === assignedLecturers.length) {
+          setSelectedMessageLecturers([]);
+      } else {
+          setSelectedMessageLecturers(assignedLecturers.map(l => l.id));
+      }
   };
 
   // ── SCHEDULE HELPERS ───────────────────────────────────────────────────────
@@ -499,9 +623,24 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                     <div className="w-8 h-8 bg-[var(--color-primary)] rounded-full flex items-center justify-center text-white font-bold text-xs">{lec.name?.charAt(0).toUpperCase() || '?'}</div>
                     <span className="font-medium text-[var(--color-text-primary)]">{lec.name}</span>
                   </div>
-                  {isMainCoordinator && (
-                    <Button variant="ghost" size="sm" icon={<X className="w-3.5 h-3.5" />} onClick={() => handleRemoveLecturer(lec.id)} className="text-red-500 hover:bg-red-50 hover:text-red-700">Remove</Button>
-                  )}
+                  <div className="flex items-center gap-4">
+                    {/* Checkbox for reminders */}
+                    {isSubCoordinator && (
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                                checked={lec.wants_reminders}
+                                onChange={() => handleToggleLecturerReminder(lec.id, !!lec.wants_reminders)}
+                            />
+                            <span className="text-sm text-gray-600">Reminders</span>
+                        </label>
+                    )}
+
+                    {isMainCoordinator && (
+                      <Button variant="ghost" size="sm" icon={<X className="w-3.5 h-3.5" />} onClick={() => handleRemoveLecturer(lec.id)} className="text-red-500 hover:bg-red-50 hover:text-red-700">Remove</Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -510,12 +649,14 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
           )}
           {isMainCoordinator && (
             availableLecturers.length > 0 ? (
-              <div className="border-t pt-4 flex gap-2">
-                <select id="lecturer-select" className={`flex-1 ${selectClass}`} value={selectedLecturerId} onChange={e => setSelectedLecturerId(e.target.value)}>
-                  <option value="">Add a Lecturer</option>
-                  {availableLecturers.map(u => <option key={getUserId(u)} value={String(getUserId(u))}>{u.name}</option>)}
-                </select>
-                <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={handleAddLecturer} disabled={!selectedLecturerId || lecturerLoading}>Add</Button>
+              <div className="border-t pt-4">
+                  <div className="flex gap-2">
+                    <select id="lecturer-select" className={`flex-1 ${selectClass}`} value={selectedLecturerId} onChange={e => setSelectedLecturerId(e.target.value)}>
+                      <option value="">Add a Lecturer</option>
+                      {availableLecturers.map(u => <option key={getUserId(u)} value={String(getUserId(u))}>{u.name}</option>)}
+                    </select>
+                    <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={handleAddLecturer} disabled={!selectedLecturerId || lecturerLoading}>Add</Button>
+                  </div>
               </div>
             ) : (
               <div className="border-t pt-4"><p className="text-sm text-gray-400 italic">All available lecturers are already assigned</p></div>
@@ -624,6 +765,103 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
             <p className="text-xs text-gray-400 italic">No schedule configured yet. The assigned sub-coordinator can add weekly slots.</p>
           )}
         </Card>
+
+        {/* ── REMINDER SETTINGS (Sub-Coordinator only) ── */}
+        {isSubCoordinator && (
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <Bell className="w-5 h-5 text-[var(--color-primary)]" />
+              <h2 className="font-bold text-[var(--color-text-primary)]">Reminder Settings</h2>
+            </div>
+            
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">Send Reminder</label>
+                    <select className={selectClass} value={reminderHours} onChange={e => setReminderHours(e.target.value)}>
+                        <option value="24">24 hours before</option>
+                        <option value="48">48 hours before</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">Message Template (Optional)</label>
+                    <textarea 
+                        className={`${selectClass} min-h-[100px] resize-y`} 
+                        placeholder="Reminder: You have an upcoming session for module {moduleId} scheduled at {sessionDate}."
+                        value={reminderTemplate}
+                        onChange={e => setReminderTemplate(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Variables available: &#123;lecturerName&#125;, &#123;sessionDate&#125;, &#123;moduleName&#125;, &#123;moduleCode&#125;, &#123;location&#125;</p>
+                </div>
+
+                <Button 
+                    variant="primary" 
+                    onClick={handleSaveReminders} 
+                    disabled={savingReminders}
+                    className="w-full"
+                >
+                    {savingReminders ? 'Saving...' : 'Save Settings'}
+                </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── CUSTOM MESSAGING (Sub-Coordinator only) ── */}
+        {isSubCoordinator && (
+          <Card>
+             <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-[var(--color-primary)]" />
+              <h2 className="font-bold text-[var(--color-text-primary)]">Send Custom Message</h2>
+            </div>
+            
+            {assignedLecturers.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No lecturers assigned to this module yet.</p>
+            ) : (
+                <div className="space-y-4">
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                             <label className="block text-sm font-medium text-[var(--color-text-primary)]">Select Recipients</label>
+                             <button type="button" onClick={toggleAllMessageLecturers} className="text-xs text-[var(--color-primary)] hover:underline">
+                                 {selectedMessageLecturers.length === assignedLecturers.length ? 'Deselect All' : 'Select All'}
+                             </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[150px] overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
+                            {assignedLecturers.map(lec => (
+                                <label key={lec.id} className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border border-gray-100 shadow-sm hover:border-[var(--color-primary)] transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                                        checked={selectedMessageLecturers.includes(lec.id)}
+                                        onChange={() => toggleMessageLecturer(lec.id)}
+                                    />
+                                    <span className="text-sm font-medium text-[var(--color-text-primary)]">{lec.name}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">Message</label>
+                        <textarea 
+                            className={`${selectClass} min-h-[120px] resize-y`} 
+                            placeholder="Type your message here... It will be sent via Email and WhatsApp."
+                            value={customMessage}
+                            onChange={e => setCustomMessage(e.target.value)}
+                        />
+                    </div>
+
+                    <Button 
+                        variant="primary" 
+                        onClick={handleSendCustomMessage} 
+                        disabled={sendingMessage || selectedMessageLecturers.length === 0 || !customMessage.trim()}
+                        className="w-full"
+                    >
+                        {sendingMessage ? 'Sending...' : `Send to ${selectedMessageLecturers.length} Lecturer${selectedMessageLecturers.length !== 1 ? 's' : ''}`}
+                    </Button>
+                </div>
+            )}
+          </Card>
+        )}
 
         {/* ── TIMETABLE (Sub-Coordinator only) ── */}
         {isSubCoordinator && (

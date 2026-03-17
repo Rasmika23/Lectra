@@ -281,25 +281,28 @@ app.get('/lecturers/:id/modules', async (req, res) => {
   }
 });
 
-// Get sessions for a specific module and lecturer
-app.get('/modules/:id/sessions', async (req, res) => {
+// Get sessions for a specific module
+app.get('/modules/:id/sessions', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { lecturerId } = req.query;
   try {
     let query = `
       SELECT 
+        s.sessionid,
         s.sessionid as id,
         s.moduleid,
         m.modulecode,
         m.modulename,
         s.lecturerid,
-        s.datetime as "datetime",
+        s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
         to_char(s.datetime, 'HH24:MI') as time,
         s.duration,
+        s.locationorurl,
         s.locationorurl as location,
         s.status,
         s.mode,
+        s.reminder_sent,
         u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
@@ -318,6 +321,47 @@ app.get('/modules/:id/sessions', async (req, res) => {
     console.error('Error fetching module sessions:', err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// POST /sessions/:id/send-reminder — manually trigger reminders
+app.post('/sessions/:id/send-reminder', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const sessionId = parseInt(id);
+    
+    if (isNaN(sessionId)) {
+        return res.status(400).json({ error: 'Invalid session ID' });
+    }
+
+    try {
+        await reminderScheduler.triggerManualReminder(sessionId);
+        res.json({ success: true, message: 'Reminder sent successfully' });
+    } catch (err) {
+        console.error('Error sending manual reminder:', err);
+        res.status(500).json({ error: 'Failed to send reminder' });
+    }
+});
+
+// DELETE /sessions/:id — delete a specific session
+app.delete('/sessions/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const sessionId = parseInt(id);
+        if (isNaN(sessionId)) return res.status(400).json({ error: 'Invalid session ID' });
+
+        // Optional: Check if the user is the sub-coordinator or main-coordinator
+        // For simplicity and since it's an internal tool, we'll allow authenticated users for now, 
+        // but normally we'd join with module and check subcoordinatorid.
+        const result = await db.query('DELETE FROM session WHERE sessionid = $1 RETURNING *', [sessionId]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        res.json({ message: 'Session deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting session:', err);
+        res.status(500).json({ error: 'Server error: ' + err.message });
+    }
 });
 
 // Reschedule a session
@@ -525,6 +569,8 @@ app.get('/modules', authenticateToken, async (req, res) => {
         m.semester, 
         m.studenttimetablepath,
         m.semesterenddate,
+        m.reminder_hours,
+        m.reminder_template,
         u_sub.name as subcoordinator,
         u_sub.userid as subcoordinatorid,
         (
@@ -683,8 +729,7 @@ app.patch('/modules/:id/settings', authenticateToken, async (req, res) => {
 // Assign lecturers to module
 app.post('/modules/:id/assign-lecturers', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { lecturerIds } = req.body; // Array of IDs
-    // console.log(`Assigning lecturers ${JSON.stringify(lecturerIds)} to module ${id}`);
+  const { lecturerIds } = req.body; // Array of IDs or Objects
   
   try {
     const moduleId = parseInt(id);
@@ -698,23 +743,51 @@ app.post('/modules/:id/assign-lecturers', authenticateToken, async (req, res) =>
     
     // Insert new assignments
     if (lecturerIds && Array.isArray(lecturerIds) && lecturerIds.length > 0) {
-      for (const lecturerId of lecturerIds) {
-        const lId = parseInt(lecturerId);
+      for (const reqLecturer of lecturerIds) {
+        let lId, wantsReminders;
+        if (typeof reqLecturer === 'object' && reqLecturer !== null) {
+            lId = parseInt(reqLecturer.id);
+            wantsReminders = !!reqLecturer.wants_reminders;
+        } else {
+            lId = parseInt(reqLecturer);
+            wantsReminders = true; // default to true if only ID is provided
+        }
+
         if (!isNaN(lId)) {
           await db.query(
-            'INSERT INTO modulelecturer (moduleid, lecturerid) VALUES ($1, $2)',
-            [moduleId, lId]
+            'INSERT INTO modulelecturer (moduleid, lecturerid, wants_reminders) VALUES ($1, $2, $3)',
+            [moduleId, lId, wantsReminders]
           );
         }
       }
     }
     
     await db.query('COMMIT');
-    // console.log(`Lecturers assigned successfully to module ${id}`);
     res.json({ message: 'Lecturers assigned successfully' });
   } catch (err) {
     await db.query('ROLLBACK');
     console.error('Error assigning lecturers:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+// Get lecturers assigned to a specific module
+app.get('/modules/:id/lecturers', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const moduleId = parseInt(id);
+    if (isNaN(moduleId)) return res.status(400).json({ error: 'Invalid module ID' });
+
+    const query = `
+      SELECT u.userid as id, u.name, u.email, ml.wants_reminders
+      FROM modulelecturer ml
+      JOIN users u ON ml.lecturerid = u.userid
+      WHERE ml.moduleid = $1
+    `;
+    const result = await db.query(query, [moduleId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching module lecturers:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
@@ -736,6 +809,88 @@ app.get('/sessions/available-slots', authenticateToken, async (req, res) => {
     console.error('Error fetching available slots:', err);
     res.status(500).json({ error: 'Server error retrieving available slots' });
   }
+});
+
+// Send Custom Message to Assigned Lecturers
+const { sendMail } = require('./email');
+const whatsappService = require('./services/WhatsAppService');
+
+app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { lecturerIds, messageText } = req.body;
+  if (!messageText || typeof messageText !== 'string') return res.status(400).json({ error: 'Message text required' });
+  if (!lecturerIds || !Array.isArray(lecturerIds) || lecturerIds.length === 0) return res.status(400).json({ error: 'No lecturers selected' });
+
+  try {
+    const moduleId = parseInt(id);
+    if (isNaN(moduleId)) return res.status(400).json({ error: 'Invalid module ID' });
+
+    const moduleCheck = await db.query('SELECT modulename, modulecode FROM module WHERE moduleid = $1', [moduleId]);
+    if (moduleCheck.rows.length === 0) return res.status(404).json({ error: 'Module not found' });
+    const { modulename, modulecode } = moduleCheck.rows[0];
+
+    const query = `
+      SELECT u.userid, u.name, u.email, lp.phonenumber
+      FROM users u
+      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
+      WHERE u.userid = ANY($1::int[])
+    `;
+    const lecturersRes = await db.query(query, [lecturerIds]);
+    const lecturers = lecturersRes.rows;
+
+    let emailCount = 0; let waCount = 0; const errors = [];
+
+    for (const lecturer of lecturers) {
+      if (lecturer.email) {
+        try {
+          const emailHtml = `<h2>Message from Sub-Coordinator - ${modulecode}</h2><p>Dear ${lecturer.name},</p><p>${messageText.replace(/\n/g, '<br>')}</p><hr><p><small>Lectra Session Management System</small></p>`;
+          await sendMail(lecturer.email, `Message regarding ${modulecode} - ${modulename}`, messageText, emailHtml);
+          emailCount++;
+        } catch (e) {
+          console.error(`Email fail: ${lecturer.email}`, e);
+          errors.push(`Email to ${lecturer.name} failed.`);
+        }
+      }
+      if (lecturer.phonenumber) {
+        try {
+            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\nDear ${lecturer.name},\n\n${messageText}\n\n_Lectra Session Management System_`;
+            const waSuccess = await whatsappService.sendMessage(lecturer.phonenumber, formattedMessage);
+            if (waSuccess) waCount++;
+            else errors.push(`WhatsApp to ${lecturer.name} failed (Service error).`);
+        } catch (e) {
+          console.error(`WA fail: ${lecturer.phonenumber}`, e);
+          errors.push(`WhatsApp to ${lecturer.name} failed.`);
+        }
+      } else {
+          console.warn(`Lecturer ${lecturer.name} logic no WA number`);
+      }
+    }
+
+    res.json({ message: 'Message dispatch complete', stats: { emailsSent: emailCount, whatsappsSent: waCount, totalAttempted: lecturers.length, errors }});
+  } catch (err) {
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+
+
+// Create a single custom session
+app.post('/modules/:moduleId/sessions', authenticateToken, async (req, res) => {
+    try {
+        const { moduleId } = req.params;
+        const { datetime, mode, duration, locationorurl } = req.body;
+        if (!datetime || !mode || !duration) return res.status(400).json({ error: 'Missing req params' });
+
+        const query = `
+            INSERT INTO session (moduleid, datetime, mode, status, locationorurl, duration, reminder_sent)
+            VALUES ($1, $2, $3, 'Scheduled', $4, $5, false)
+            RETURNING *
+        `;
+        const result = await db.query(query, [moduleId, datetime, mode, locationorurl, duration]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Server error: ' + err.message });
+    }
 });
 
 // Upload timetable endpoint
@@ -783,6 +938,11 @@ app.get('/test-db', async (req, res) => {
     res.status(500).json({ error: 'Database connection failed' });
   }
 });
+
+// Start services
+whatsappService.initialize();
+const reminderScheduler = require('./services/ReminderScheduler');
+reminderScheduler.start();
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);

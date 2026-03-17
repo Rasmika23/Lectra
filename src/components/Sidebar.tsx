@@ -40,6 +40,7 @@ export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProp
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'sub-dashboard' },
           { label: 'Module Management', icon: <Settings className="w-5 h-5" />, href: 'module-management' },
+          { label: 'Sessions', icon: <Calendar className="w-5 h-5" />, href: 'sub-sessions' },
           { label: 'Attendance', icon: <ClipboardList className="w-5 h-5" />, href: 'attendance' },
           { label: 'Reports', icon: <FileText className="w-5 h-5" />, href: 'reports' },
         ];

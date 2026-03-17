@@ -35,4 +35,21 @@ async function sendInviteEmail(email, inviteLink) {
   }
 }
 
-module.exports = { sendInviteEmail };
+async function sendMail(to, subject, textContent, htmlContent) {
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM_EMAIL || '"Lectra" <noreply@lectra.com>',
+      to: to,
+      subject: subject,
+      text: textContent,
+      html: htmlContent,
+    });
+    console.log('Generic Email sent:', info.messageId);
+    return { success: true, data: info };
+  } catch (error) {
+    console.error('Generic Email sending failed:', error);
+    return { success: false, error };
+  }
+}
+
+module.exports = { sendInviteEmail, sendMail };

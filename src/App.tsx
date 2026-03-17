@@ -18,6 +18,7 @@ import { LecturerProfilePage } from './pages/LecturerProfilePage';
 import { UserProfilePage } from './pages/UserProfilePage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SetupAccountPage } from './pages/SetupAccountPage';
+import { SubCoordinatorSessionsPage } from './pages/SubCoordinatorSessionsPage';
 
 type Page =
   | 'login'
@@ -28,6 +29,7 @@ type Page =
   | 'create-module'
   | 'sub-dashboard'
   | 'module-management'
+  | 'sub-sessions'
   | 'attendance'
   | 'lecturer-portal'
   | 'my-lectures'
@@ -165,6 +167,9 @@ export default function App() {
 
       case 'module-management':
         return <ModuleManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+
+      case 'sub-sessions':
+        return <SubCoordinatorSessionsPage currentUser={currentUser} />;
 
       case 'attendance':
         return <AttendanceRecordingPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
