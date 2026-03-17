@@ -284,9 +284,8 @@ app.get('/lecturers/:id/modules', async (req, res) => {
 // Get sessions for a specific module
 app.get('/modules/:id/sessions', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { lecturerId } = req.query;
   try {
-    let query = `
+    const query = `
       SELECT 
         s.sessionid,
         s.sessionid as id,
@@ -308,17 +307,48 @@ app.get('/modules/:id/sessions', authenticateToken, async (req, res) => {
       JOIN module m ON s.moduleid = m.moduleid
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE s.moduleid = $1
+      ORDER BY s.datetime ASC
     `;
-    const params = [parseInt(id)];
-    if (lecturerId) {
-      query += ` AND (s.lecturerid = $2 OR s.lecturerid IS NULL)`;
-      params.push(parseInt(lecturerId));
-    }
-    query += ` ORDER BY s.datetime ASC`;
-    const result = await db.query(query, params);
+    const result = await db.query(query, [parseInt(id)]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching module sessions:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get all sessions for a specific lecturer across all modules
+app.get('/lecturers/:id/sessions', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const query = `
+      SELECT 
+        s.sessionid,
+        s.sessionid as id,
+        s.moduleid,
+        m.modulecode,
+        m.modulename,
+        s.lecturerid,
+        s.datetime,
+        to_char(s.datetime, 'YYYY-MM-DD') as date,
+        to_char(s.datetime, 'HH24:MI') as time,
+        s.duration,
+        s.locationorurl,
+        s.locationorurl as location,
+        s.status,
+        s.mode,
+        u.name as lecturername
+      FROM session s
+      JOIN module m ON s.moduleid = m.moduleid
+      JOIN modulelecturer ml ON m.moduleid = ml.moduleid
+      LEFT JOIN users u ON s.lecturerid = u.userid
+      WHERE ml.lecturerid = $1
+      ORDER BY s.datetime ASC
+    `;
+    const result = await db.query(query, [parseInt(id)]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching lecturer summary sessions:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -370,12 +400,18 @@ app.patch('/sessions/:id', authenticateToken, async (req, res) => {
   const { datetime, duration, location, lecturerid } = req.body;
 
   try {
+    // If lecturerid is not provided, and the user is a lecturer, assign it to them
+    let targetLecturerId = lecturerid;
+    if (!targetLecturerId && req.user.role === 'lecturer') {
+      targetLecturerId = req.user.id;
+    }
+
     const result = await db.query(
       `UPDATE session 
        SET datetime = $1, duration = $2, locationorurl = $3, lecturerid = COALESCE($4, lecturerid), status = 'Rescheduled'
        WHERE sessionid = $5 
        RETURNING *`,
-      [datetime, duration, location, lecturerid || null, parseInt(id)]
+      [datetime, duration, location, targetLecturerId || null, parseInt(id)]
     );
 
     if (result.rows.length === 0) {

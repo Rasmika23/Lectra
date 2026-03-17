@@ -81,7 +81,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         if (!selectedModule) return;
         setLoadingSessions(true);
         try {
-            const r = await fetch(`${API}/modules/${selectedModule.moduleid}/sessions?lecturerId=${lecturerId}`, {
+            const r = await fetch(`${API}/modules/${selectedModule.moduleid}/sessions`, {
                 headers: authHeaders()
             });
             const data = await r.json();
