@@ -4,7 +4,7 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, ArrowLeft, BookOpen } from 'lucide-react';
-import { authHeaders } from '../lib/api';
+import { authHeaders, fetchWithAuth } from '../lib/api';
 import { toast } from 'sonner';
 
 const API = 'http://localhost:5000';
@@ -65,7 +65,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
     useEffect(() => {
         if (!lecturerId) return;
         setLoadingModules(true);
-        fetch(`${API}/lecturers/${lecturerId}/modules`, { headers: authHeaders() })
+        fetchWithAuth(`${API}/lecturers/${lecturerId}/modules`)
             .then(r => r.json())
             .then(data => {
                 setModules(Array.isArray(data) ? data : []);
@@ -81,9 +81,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         if (!selectedModule) return;
         setLoadingSessions(true);
         try {
-            const r = await fetch(`${API}/modules/${selectedModule.moduleid}/sessions`, {
-                headers: authHeaders()
-            });
+            const r = await fetchWithAuth(`${API}/modules/${selectedModule.moduleid}/sessions`);
             const data = await r.json();
             setSessions(Array.isArray(data) ? data : []);
         } catch (err) {
@@ -103,9 +101,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
     useEffect(() => {
         if (duration && reschedulingSession) {
             setIsLoadingSlots(true);
-            fetch(`${API}/sessions/available-slots?sessionId=${reschedulingSession.id}&durationHours=${duration}&weekOffset=${selectedWeek}`, {
-                headers: authHeaders()
-            })
+            fetchWithAuth(`${API}/sessions/available-slots?sessionId=${reschedulingSession.id}&durationHours=${duration}&weekOffset=${selectedWeek}`)
                 .then(r => r.json())
                 .then(data => {
                     setAvailableSlotsGrid(Array.isArray(data) ? data : []);
@@ -191,10 +187,9 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         const newDateTime = `${dayObj.date} ${selectedSlot.time}`;
         
         try {
-            const res = await fetch(`${API}/sessions/${reschedulingSession.id}`, {
+            const res = await fetchWithAuth(`${API}/sessions/${reschedulingSession.id}`, {
                 method: 'PATCH',
                 headers: {
-                    ...authHeaders(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({

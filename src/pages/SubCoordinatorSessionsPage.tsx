@@ -6,7 +6,7 @@ import { Select } from '../components/Select';
 import { StatusBadge } from '../components/StatusBadge';
 import { Calendar, Clock, MapPin, Video, Users, Plus, X, BookOpen, Bell, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { authHeaders } from '../lib/api';
+import { authHeaders, fetchWithAuth } from '../lib/api';
 
 const API = 'http://localhost:5000';
 
@@ -58,7 +58,7 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
   const fetchModules = async () => {
     setLoadingModules(true);
     try {
-      const res = await fetch(`${API}/modules`, { headers: authHeaders() });
+      const res = await fetchWithAuth(`${API}/modules`);
       if (!res.ok) throw new Error('Failed to fetch modules');
       const data: Module[] = await res.json();
       // Filter only modules assigned to this Sub-Coordinator
@@ -74,7 +74,7 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
   const fetchSessions = async (moduleId: number) => {
     setLoadingSessions(true);
     try {
-      const res = await fetch(`${API}/modules/${moduleId}/sessions`, { headers: authHeaders() });
+      const res = await fetchWithAuth(`${API}/modules/${moduleId}/sessions`);
       if (!res.ok) throw new Error('Failed to fetch sessions');
       const data = await res.json();
       setSessions(data);
@@ -97,9 +97,9 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
       // Combine date and time
       const datetime = new Date(`${newDate}T${newTime}`);
       
-      const res = await fetch(`${API}/modules/${selectedModule.moduleid}/sessions`, {
+      const res = await fetchWithAuth(`${API}/modules/${selectedModule.moduleid}/sessions`, {
         method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           datetime: datetime.toISOString(),
           mode: newMode,
@@ -127,9 +127,8 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
   const handleSendReminder = async (sessionId: number) => {
     setSendingReminderId(sessionId);
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}/send-reminder`, {
-        method: 'POST',
-        headers: authHeaders()
+      const res = await fetchWithAuth(`${API}/sessions/${sessionId}/send-reminder`, {
+        method: 'POST'
       });
       if (!res.ok) throw new Error('Failed to send reminder');
       toast.success('Reminder sent successfully');
@@ -146,9 +145,8 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
     if (!window.confirm('Are you sure you want to delete this session? This action cannot be undone.')) return;
 
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}`, {
-        method: 'DELETE',
-        headers: authHeaders()
+      const res = await fetchWithAuth(`${API}/sessions/${sessionId}`, {
+        method: 'DELETE'
       });
       if (!res.ok) throw new Error('Failed to delete session');
       toast.success('Session deleted successfully');

@@ -95,6 +95,16 @@ export default function App() {
     };
 
     checkConnection();
+
+    // Listen for auth failures (401/403) from fetchWithAuth
+    const handleAuthFailure = () => {
+      console.log('Auth failure detected, logging out');
+      toast.error('Session expired. Please log in again.');
+      handleLogout();
+    };
+
+    window.addEventListener('auth-failure', handleAuthFailure);
+    return () => window.removeEventListener('auth-failure', handleAuthFailure);
   }, []);
 
   const handleLogin = (user: any, token?: string) => {

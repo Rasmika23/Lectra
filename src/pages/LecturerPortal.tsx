@@ -3,7 +3,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
 import { Calendar, Clock, MapPin, User, FileText } from 'lucide-react';
-import { authHeaders } from '../lib/api';
+import { fetchWithAuth } from '../lib/api';
 
 interface LecturerPortalProps {
   currentUser: any;
@@ -19,9 +19,7 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
   useEffect(() => {
     if (!lecturerId) return;
     setLoading(true);
-    fetch(`http://localhost:5000/lecturers/${lecturerId}/sessions`, {
-      headers: authHeaders()
-    })
+    fetchWithAuth(`http://localhost:5000/lecturers/${lecturerId}/sessions`)
       .then(r => r.json())
       .then(data => {
         setSessions(Array.isArray(data) ? data : []);
