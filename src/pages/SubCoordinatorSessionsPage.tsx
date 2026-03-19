@@ -4,7 +4,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { StatusBadge } from '../components/StatusBadge';
-import { Calendar, Clock, MapPin, Video, Users, Plus, X, BookOpen, Bell, Check, Trash2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, Video, Users, Plus, X, BookOpen, Bell, Check, Trash2, Settings, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHeaders, fetchWithAuth } from '../lib/api';
 
@@ -27,7 +27,7 @@ interface Session {
   reminder_sent?: boolean;
 }
 
-export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }) {
+export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { currentUser: any, onNavigate: (page: string, params?: any) => void }) {
   const [modules, setModules] = useState<Module[]>([]);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -185,6 +185,10 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
     return sessionDate <= twoDaysFromNow && sessionDate >= new Date();
   };
 
+  const isPastSession = (dateString: string) => {
+    return new Date(dateString) <= new Date();
+  };
+
   const selectClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all";
 
   return (
@@ -314,6 +318,23 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
                                 {sendingReminderId === session.sessionid ? 'Sending...' : 'Send Reminder'}
                               </Button>
                             )}
+                            {isPastSession(session.datetime) ? (
+                                <button 
+                                    onClick={() => onNavigate('attendance', { moduleId: selectedModule.moduleid, sessionId: session.sessionid })} 
+                                    className="p-2 text-gray-400 hover:text-[var(--color-primary)] transition-colors"
+                                    title="Manage Attendance"
+                                >
+                                    <ClipboardList className="w-4 h-4" />
+                                </button>
+                            ) : (
+                                <button 
+                                    className="p-2 text-gray-300 cursor-not-allowed"
+                                    title="Attendance can only be marked after session starts"
+                                    disabled
+                                >
+                                    <ClipboardList className="w-4 h-4" />
+                                </button>
+                            )}
                             <button 
                                 onClick={() => handleDeleteSession(session.sessionid)} 
                                 className="p-2 text-gray-400 hover:text-red-500 transition-colors"
@@ -355,6 +376,23 @@ export function SubCoordinatorSessionsPage({ currentUser }: { currentUser: any }
                                     <span>{session.locationorurl || 'TBD'}</span>
                                 </div>
                             </div>
+                            {isPastSession(session.datetime) ? (
+                                <button 
+                                    onClick={() => onNavigate('attendance', { moduleId: selectedModule.moduleid, sessionId: session.sessionid })} 
+                                    className="p-2 text-gray-400 hover:text-[var(--color-primary)] transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Manage Attendance"
+                                >
+                                    <ClipboardList className="w-4 h-4" />
+                                </button>
+                            ) : (
+                                <button 
+                                    className="p-2 text-gray-300 cursor-not-allowed opacity-0 group-hover:opacity-100"
+                                    title="Attendance can only be marked after session starts"
+                                    disabled
+                                >
+                                    <ClipboardList className="w-4 h-4" />
+                                </button>
+                            )}
                             <button 
                                 onClick={() => handleDeleteSession(session.sessionid)} 
                                 className="p-2 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"

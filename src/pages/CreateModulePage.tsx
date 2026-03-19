@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
+import { useScrollToTop } from '../lib/hooks';
 
 interface CreateModulePageProps {
   currentUser: any;
@@ -20,6 +21,9 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [codeError, setCodeError] = useState('');
   
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  useScrollToTop(scrollContainerRef, [showSuccess, codeError]);
+
   const academicYearOptions = [
     { value: '', label: 'Select academic year' },
     { value: '2024/2025', label: '2024/2025' },
@@ -67,7 +71,10 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
             
       <div className="flex-1 flex flex-col h-full">
                 
-        <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
+        <main 
+          ref={scrollContainerRef}
+          className="h-full p-[var(--space-xl)] bg-[var(--color-bg-sidebar)]"
+        >
           <div className="max-w-3xl mx-auto space-y-[var(--space-xl)]">
             {/* Breadcrumb */}
             <button

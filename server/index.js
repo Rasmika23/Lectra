@@ -353,6 +353,126 @@ app.get('/lecturers/:id/sessions', authenticateToken, async (req, res) => {
   }
 });
 
+// Get lecturer profile and bank details
+app.get('/lecturer/profile', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'lecturer') {
+    return res.status(403).json({ error: 'Access denied. Lecturers only.' });
+  }
+
+  try {
+    const userId = req.user.id;
+    
+    // Fetch user info, profile, and bank details
+    const query = `
+      SELECT 
+        u.userid, u.name, u.email,
+        lp.phonenumber, lp.address, lp.nicnumber, lp.cvpath,
+        bd.bankname, bd.accountnumber, bd.branch, 
+        bd.accountholdername, bd.bankcountry, bd.swiftbic, bd.iban
+      FROM users u
+      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
+      LEFT JOIN bankdetails bd ON u.userid = bd.lecturerid
+      WHERE u.userid = $1
+    `;
+    const result = await db.query(query, [userId]);
+    const logMsg = `FETCH: user ${userId}, found ${result.rows.length} rows, first row phone: ${result.rows[0]?.phonenumber}\n`;
+    fs.appendFileSync(path.join(__dirname, 'debug_profile.log'), logMsg);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Lecturer not found' });
+    }
+
+    const row = result.rows[0];
+    console.log('Fetched data (first row):', { phonenumber: row.phonenumber, address: row.address, nicnumber: row.nicnumber });
+    res.json({
+      id: row.userid,
+      name: row.name,
+      email: row.email,
+      phone: row.phonenumber || '',
+      address: row.address || '',
+      nicNumber: row.nicnumber || '',
+      cvUploaded: !!row.cvpath,
+      cvFileName: row.cvpath ? path.basename(row.cvpath) : null,
+      bankDetails: {
+        bankName: row.bankname || '',
+        accountNumber: row.accountnumber || '',
+        branch: row.branch || '',
+        accountHolderName: row.accountholdername || '',
+        bankCountry: row.bankcountry || '',
+        swiftBic: row.swiftbic || '',
+        iban: row.iban || ''
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching profile:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update lecturer profile and bank details
+app.post('/lecturer/profile', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'lecturer') {
+    return res.status(403).json({ error: 'Access denied. Lecturers only.' });
+  }
+
+  const { phone, address, nicNumber, bankDetails } = req.body;
+  const userId = req.user.id;
+  fs.appendFileSync(path.join(__dirname, 'debug_profile.log'), `SAVE: user ${userId}, data: ${JSON.stringify({ phone, address, nicNumber })}\n`);
+
+  try {
+    await db.query('BEGIN');
+
+    // 1. Update lecturerprofile if contact details are provided
+    if (phone !== undefined || address !== undefined || nicNumber !== undefined) {
+      const lpResult = await db.query(`
+        INSERT INTO lecturerprofile (lecturerid, phonenumber, address, nicnumber)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (lecturerid) DO UPDATE SET
+          phonenumber = COALESCE(EXCLUDED.phonenumber, lecturerprofile.phonenumber),
+          address = COALESCE(EXCLUDED.address, lecturerprofile.address),
+          nicnumber = COALESCE(EXCLUDED.nicnumber, lecturerprofile.nicnumber)
+        RETURNING *
+      `, [userId, phone, address, nicNumber]);
+      fs.appendFileSync(path.join(__dirname, 'debug_profile.log'), `SAVE RESULT: ${JSON.stringify(lpResult.rows[0])}\n`);
+    }
+
+    // 2. Update bankdetails if provided
+    if (bankDetails) {
+      await db.query(`
+        INSERT INTO bankdetails (
+          lecturerid, bankname, accountnumber, branch, 
+          accountholdername, bankcountry, swiftbic, iban
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (lecturerid) DO UPDATE SET
+          bankname = EXCLUDED.bankname,
+          accountnumber = EXCLUDED.accountnumber,
+          branch = EXCLUDED.branch,
+          accountholdername = EXCLUDED.accountholdername,
+          bankcountry = EXCLUDED.bankcountry,
+          swiftbic = EXCLUDED.swiftbic,
+          iban = EXCLUDED.iban
+      `, [
+        userId, 
+        bankDetails.bankName, 
+        bankDetails.accountNumber, 
+        bankDetails.branch || '',
+        bankDetails.accountHolderName,
+        bankDetails.bankCountry,
+        bankDetails.swiftBic,
+        bankDetails.iban
+      ]);
+    }
+
+    await db.query('COMMIT');
+    res.json({ message: 'Updated successfully' });
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error('Error updating profile:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
 // POST /sessions/:id/send-reminder — manually trigger reminders
 app.post('/sessions/:id/send-reminder', authenticateToken, async (req, res) => {
     const { id } = req.params;
@@ -961,6 +1081,146 @@ app.post('/modules/:moduleId/timetable', authenticateToken, upload.single('timet
     console.error('Error uploading timetable:', err);
     if (req.file) fs.unlinkSync(req.file.path); // clean up file on error
     res.status(500).json({ error: 'Server error uploading timetable' });
+  }
+});
+
+// --- Attendance & Session Details Endpoints ---
+
+// Get modules assigned to the logged-in sub-coordinator
+app.get('/subcoordinator/modules', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'sub-coordinator') {
+    return res.status(403).json({ error: 'Access denied. Sub-coordinators only.' });
+  }
+  try {
+    const query = `
+      SELECT moduleid, modulecode, modulename, academicyear, semester
+      FROM module
+      WHERE subcoordinatorid = $1
+      ORDER BY academicyear DESC, semester DESC, modulecode ASC
+    `;
+    const result = await db.query(query, [req.user.id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching sub-coordinator modules:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get past sessions for a specific module
+app.get('/modules/:id/sessions/past', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const query = `
+      SELECT 
+        s.sessionid,
+        s.moduleid,
+        m.modulecode,
+        m.modulename,
+        s.datetime,
+        to_char(s.datetime, 'YYYY-MM-DD') as date,
+        to_char(s.datetime, 'HH24:MI') as time,
+        s.duration,
+        s.locationorurl as location,
+        s.status,
+        sd.topicscovered,
+        sd.actual_duration,
+        EXISTS(SELECT 1 FROM sessionattendance sa WHERE sa.sessionid = s.sessionid) as has_attendance
+      FROM session s
+      JOIN module m ON s.moduleid = m.moduleid
+      LEFT JOIN sessiondetails sd ON s.sessionid = sd.sessionid
+      WHERE s.moduleid = $1 AND s.datetime <= NOW()
+      ORDER BY s.datetime DESC
+    `;
+    const result = await db.query(query, [parseInt(id)]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching past sessions:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get attendance and details for a specific session
+app.get('/sessions/:id/attendance', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const sessionId = parseInt(id);
+    if (isNaN(sessionId)) return res.status(400).json({ error: 'Invalid session ID' });
+
+    const detailsResult = await db.query('SELECT * FROM sessiondetails WHERE sessionid = $1', [sessionId]);
+    const attendanceResult = await db.query('SELECT * FROM sessionattendance WHERE sessionid = $1', [sessionId]);
+    
+    // Map attendance to an object for easy frontend use: { lecturerId: isAttended }
+    const attendanceMap = {};
+    attendanceResult.rows.forEach(row => {
+      attendanceMap[row.lecturerid] = row.isattended;
+    });
+
+    res.json({
+      details: detailsResult.rows[0] || null,
+      attendance: attendanceMap
+    });
+  } catch (err) {
+    console.error('Error fetching session attendance:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Record attendance for a session
+app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { attendance, topicsCovered, actualDuration } = req.body;
+  const sessionId = parseInt(id);
+
+  try {
+    await db.query('BEGIN');
+
+    // 1. Update/Insert Session Details
+    // We fetch existing details first to allow partial updates
+    const existingDetails = await db.query('SELECT * FROM sessiondetails WHERE sessionid = $1', [sessionId]);
+    
+    let finalTopicsCovered = topicsCovered;
+    let finalActualDuration = actualDuration !== undefined ? actualDuration : null;
+
+    // If values are not provided, keep existing ones
+    if (existingDetails.rows.length > 0) {
+      if (topicsCovered === undefined || topicsCovered === null) {
+        finalTopicsCovered = existingDetails.rows[0].topicscovered;
+      }
+      if (actualDuration === undefined || actualDuration === null) {
+        finalActualDuration = existingDetails.rows[0].actual_duration;
+      }
+    }
+
+    await db.query('DELETE FROM sessiondetails WHERE sessionid = $1', [sessionId]);
+    await db.query(
+      'INSERT INTO sessiondetails (sessionid, topicscovered, actual_duration, recordedby, recordedat) VALUES ($1, $2, $3, $4, NOW())',
+      [sessionId, finalTopicsCovered || '', finalActualDuration || 0, req.user.id]
+    );
+
+    // 2. Update Attendance
+    // If attendance is provided, update it. If not, keep existing (or clear if explicit empty object)
+    if (attendance && typeof attendance === 'object') {
+      await db.query('DELETE FROM sessionattendance WHERE sessionid = $1', [sessionId]);
+      for (const [lecturerId, isAttended] of Object.entries(attendance)) {
+        await db.query(
+          'INSERT INTO sessionattendance (sessionid, lecturerid, isattended) VALUES ($1, $2, $3)',
+          [sessionId, parseInt(lecturerId), isAttended]
+        );
+      }
+    }
+
+    // 3. Update Session Status
+    await db.query(
+      "UPDATE session SET status = 'Completed' WHERE sessionid = $1",
+      [sessionId]
+    );
+
+    await db.query('COMMIT');
+    res.json({ message: 'Attendance recorded successfully' });
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error('Error recording attendance:', err);
+    res.status(500).json({ error: 'Server error recording attendance' });
   }
 });
 

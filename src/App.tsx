@@ -74,6 +74,11 @@ export default function App() {
     return (savedPage as Page) || 'login';
   });
 
+  const [navigationParams, setNavigationParams] = useState<{moduleId?: string, sessionId?: string} | null>(() => {
+    const savedParams = localStorage.getItem('navigationParams');
+    return savedParams ? JSON.parse(savedParams) : null;
+  });
+
   useEffect(() => {
     // Check for setup account URL
     if (window.location.pathname === '/setup-account') {
@@ -137,9 +142,15 @@ export default function App() {
     }
   };
 
-  const handleNavigate = (page: string) => {
+  const handleNavigate = (page: string, params?: any) => {
     setCurrentPage(page as Page);
+    setNavigationParams(params || null);
     localStorage.setItem('currentPage', page);
+    if (params) {
+      localStorage.setItem('navigationParams', JSON.stringify(params));
+    } else {
+      localStorage.removeItem('navigationParams');
+    }
   };
 
   const handleLogout = () => {
@@ -179,10 +190,21 @@ export default function App() {
         return <ModuleManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'sub-sessions':
-        return <SubCoordinatorSessionsPage currentUser={currentUser} />;
+        return <SubCoordinatorSessionsPage currentUser={currentUser} onNavigate={handleNavigate} />;
 
       case 'attendance':
-        return <AttendanceRecordingPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+        return (
+          <AttendanceRecordingPage 
+            currentUser={currentUser} 
+            onNavigate={handleNavigate} 
+            onLogout={handleLogout}
+            navigationParams={navigationParams}
+            clearNavigationParams={() => {
+              setNavigationParams(null);
+              localStorage.removeItem('navigationParams');
+            }}
+          />
+        );
 
       case 'lecturer-portal':
         return <LecturerPortal currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;

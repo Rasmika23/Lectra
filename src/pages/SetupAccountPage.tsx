@@ -3,6 +3,7 @@ import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { User, Lock, Sparkles, CheckCircle } from 'lucide-react';
+import { useScrollToTop } from '../lib/hooks';
 
 interface SetupAccountPageProps {
     onNavigate: (page: string) => void;
@@ -17,6 +18,8 @@ export function SetupAccountPage({ onNavigate, onLogin }: SetupAccountPageProps)
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+
+    useScrollToTop(null, [error]);
 
     useEffect(() => {
         // Extract email from URL parameters

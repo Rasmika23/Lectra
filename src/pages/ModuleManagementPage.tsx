@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useScrollToTop } from '../lib/hooks';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -96,6 +97,9 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const isSubCoordinator = currentUser.role === 'sub-coordinator';
 
   const getUserId = (u: SystemUser) => u.userid ?? u.id ?? 0;
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollToTop(scrollRef, [subcoError, uploadMessage]);
 
   const selectClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all";
 
@@ -433,7 +437,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
         );
 
     return (
-      <div className="h-full overflow-y-auto p-[var(--space-xl)]">
+      <div ref={scrollRef} className="flex-1 p-[var(--space-xl)] overflow-x-hidden">
         <div className="max-w-5xl mx-auto space-y-[var(--space-xl)]">
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-[var(--space-md)]">
@@ -533,7 +537,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   }
 
   return (
-    <div className="h-full overflow-y-auto p-[var(--space-xl)]">
+    <div ref={scrollRef} className="h-full overflow-y-auto p-[var(--space-xl)]">
       <div className="max-w-3xl mx-auto space-y-[var(--space-lg)]">
 
         {/* Back + Header */}
