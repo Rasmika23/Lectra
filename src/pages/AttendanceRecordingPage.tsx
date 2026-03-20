@@ -55,7 +55,7 @@ export function AttendanceRecordingPage({
   
   const [selectedModule, setSelectedModule] = useState('');
   const [selectedSession, setSelectedSession] = useState('');
-  const [attendance, setAttendance] = useState<{ [key: string]: boolean }>({});
+  const [attendance, setAttendance] = useState<{ [key: string]: boolean | null }>({});
   const [topicsCovered, setTopicsCovered] = useState('');
   const [actualDuration, setActualDuration] = useState('');
   
@@ -403,7 +403,7 @@ export function AttendanceRecordingPage({
                         {lecturers.map((lecturer) => (
                           <div
                             key={lecturer.id}
-                            className="flex items-center justify-between p-[var(--space-lg)] bg-[var(--color-bg-main)] rounded-lg"
+                            className="flex flex-col md:flex-row md:items-center justify-between p-[var(--space-lg)] bg-[var(--color-bg-main)] rounded-lg gap-4"
                           >
                             <div>
                               <p className="font-medium text-[var(--color-text-primary)]">
@@ -413,14 +413,39 @@ export function AttendanceRecordingPage({
                                 Visiting Lecturer
                               </p>
                             </div>
-                            <Checkbox
-                              label="Present"
-                              checked={attendance[lecturer.id] || false}
-                              onChange={(e) => setAttendance({
-                                ...attendance,
-                                [lecturer.id]: e.target.checked
-                              })}
-                            />
+                            
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setAttendance({ 
+                                  ...attendance, 
+                                  [lecturer.id]: attendance[lecturer.id] === true ? null : true 
+                                })}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                  attendance[lecturer.id] === true
+                                    ? 'text-white shadow-md'
+                                    : 'bg-white border border-[#CBD5E1] text-[var(--color-text-secondary)] hover:bg-gray-50'
+                                }`}
+                                style={attendance[lecturer.id] === true ? { backgroundColor: '#059669' } : {}}
+                              >
+                                Present
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAttendance({ 
+                                  ...attendance, 
+                                  [lecturer.id]: attendance[lecturer.id] === false ? null : false 
+                                })}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                  attendance[lecturer.id] === false
+                                    ? 'text-white shadow-md'
+                                    : 'bg-white border border-[#CBD5E1] text-[var(--color-text-secondary)] hover:bg-gray-50'
+                                }`}
+                                style={attendance[lecturer.id] === false ? { backgroundColor: '#DC2626' } : {}}
+                              >
+                                Absent
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>

@@ -8,6 +8,7 @@ const SlotFinderService = require('./services/SlotFinderService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const reportService = require('./services/ReportService');
 
 // ── JWT Auth Middleware ─────────────────────────────────────────────────────
 function authenticateToken(req, res, next) {
@@ -225,9 +226,9 @@ app.get('/users', authenticateToken, async (req, res) => {
           WHEN r.rolename = 'SubCoordinator' THEN
             (SELECT string_agg(m.modulecode, ', ') FROM module m WHERE m.subcoordinatorid = u.userid)
           WHEN r.rolename = 'Lecturer' THEN
-            (SELECT string_agg(m.modulecode, ', ') FROM module m JOIN modulelecturer ml ON m.moduleid = ml.moduleid WHERE ml.lecturerid = u.userid)
+            (SELECT string_agg(m.moduleid::text, ', ') FROM module m JOIN modulelecturer ml ON m.moduleid = ml.moduleid WHERE ml.lecturerid = u.userid)
           ELSE NULL
-        END as assignedmodules
+        END as assignedmoduleids
       FROM users u 
       JOIN roles r ON u.roleid = r.roleid 
       ORDER BY u.userid DESC
@@ -250,9 +251,7 @@ app.get('/users', authenticateToken, async (req, res) => {
         name: user.name,
         email: user.email,
         role: frontendRole,
-        department: 'Computing',
-        joinDate: new Date().toISOString().split('T')[0],
-        assignedModules: user.assignedmodules || '',
+        assignedmoduleids: user.assignedmoduleids ? user.assignedmoduleids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) : []
       };
     });
 
@@ -528,7 +527,7 @@ app.patch('/sessions/:id', authenticateToken, async (req, res) => {
 
     const result = await db.query(
       `UPDATE session 
-       SET datetime = $1, duration = $2, locationorurl = $3, lecturerid = COALESCE($4, lecturerid), status = 'Rescheduled'
+       SET previous_datetime = datetime, datetime = $1, duration = $2, locationorurl = $3, lecturerid = COALESCE($4, lecturerid), status = 'Rescheduled'
        WHERE sessionid = $5 
        RETURNING *`,
       [datetime, duration, location, targetLecturerId || null, parseInt(id)]
@@ -1221,6 +1220,100 @@ app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
     await db.query('ROLLBACK');
     console.error('Error recording attendance:', err);
     res.status(500).json({ error: 'Server error recording attendance' });
+  }
+});
+
+// --- Report Endpoints ---
+
+// Get report data for preview
+app.get('/reports/data', authenticateToken, async (req, res) => {
+  const { type, moduleId, lecturerId, startDate, endDate } = req.query;
+  const filters = { moduleId, lecturerId, startDate, endDate };
+
+  try {
+    let data = [];
+    switch (type) {
+      case 'bank-details':
+        data = await reportService.getBankDetailsReport(filters);
+        break;
+      case 'attendance':
+        data = await reportService.getAttendanceReport(filters);
+        break;
+      case 'topics':
+        data = await reportService.getTopicsReport(filters);
+        break;
+      case 'reschedules':
+        data = await reportService.getRescheduleReport(filters);
+        break;
+      case 'weekly-schedule':
+        data = await reportService.getWeeklyScheduleReport(filters);
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid report type' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Error fetching report data:', err);
+    res.status(500).json({ error: 'Server error fetching report data: ' + err.message });
+  }
+});
+
+// Export report as Excel or PDF
+app.get('/reports/export', authenticateToken, async (req, res) => {
+  const { type, moduleId, lecturerId, startDate, endDate, format } = req.query;
+  const filters = { moduleId, lecturerId, startDate, endDate };
+  console.log(`[REPORTS] Export request: ${type}, format=${format}, filters=`, filters);
+
+  try {
+    let data = [];
+    let title = '';
+    switch (type) {
+      case 'bank-details':
+        data = await reportService.getBankDetailsReport(filters);
+        title = 'Lecturer Bank Details Report';
+        break;
+      case 'attendance':
+        data = await reportService.getAttendanceReport(filters);
+        title = 'Lecturer Attendance Report';
+        break;
+      case 'topics':
+        data = await reportService.getTopicsReport(filters);
+        title = 'Topics Covered Report';
+        break;
+      case 'reschedules':
+        data = await reportService.getRescheduleReport(filters);
+        title = 'Rescheduled Sessions Report';
+        break;
+      case 'weekly-schedule':
+        data = await reportService.getWeeklyScheduleReport(filters);
+        title = 'Weekly Schedule Report';
+        break;
+      default:
+        console.warn(`[REPORTS] Invalid report type: ${type}`);
+        return res.status(400).json({ error: 'Invalid report type' });
+    }
+
+    console.log(`[REPORTS] Data retrieved for ${type}: ${data.length} records`);
+
+    if (format === 'excel') {
+      const buffer = await reportService.exportToExcel(data, type);
+      console.log(`[REPORTS] Excel buffer generated: ${buffer.length} bytes`);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_report.xlsx"`);
+      return res.end(Buffer.from(buffer));
+    } else if (format === 'pdf') {
+      const buffer = await reportService.exportToPDF(data, type, title);
+      console.log(`[REPORTS] PDF buffer generated: ${buffer.length} bytes`);
+      res.contentType('application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_report.pdf"`);
+      return res.end(Buffer.from(buffer));
+    } else {
+      console.warn(`[REPORTS] Invalid format: ${format}`);
+      res.status(400).json({ error: 'Invalid format' });
+    }
+  } catch (err) {
+    console.error('[REPORTS] Error exporting report:', err);
+    res.status(500).json({ error: 'Server error exporting report: ' + err.message });
   }
 });
 

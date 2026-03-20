@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
-import { Download, FileText, Calendar, TrendingUp, Clock } from 'lucide-react';
-import { mockSessions, mockModules } from '../lib/mockData';
+import { Download, FileText, Calendar, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { fetchWithAuth } from '../lib/api';
 
 interface ReportsPageProps {
   currentUser: any;
@@ -16,129 +16,216 @@ interface ReportsPageProps {
 export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPageProps) {
   const [reportType, setReportType] = useState('');
   const [selectedModule, setSelectedModule] = useState('all');
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-31');
+  const [selectedLecturer, setSelectedLecturer] = useState('all');
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [format, setFormat] = useState('pdf');
   const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<any[]>([]);
   
+  const [modules, setModules] = useState<any[]>([]);
+  const [lecturers, setLecturers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchFilters();
+  }, []);
+
+  // Reset lecturer selection when module changes
+  useEffect(() => {
+    setSelectedLecturer('all');
+  }, [selectedModule]);
+
+  const fetchFilters = async () => {
+    try {
+      const [modulesRes, usersRes] = await Promise.all([
+        fetchWithAuth('http://localhost:5000/modules'),
+        fetchWithAuth('http://localhost:5000/users')
+      ]);
+      
+      const modulesData = await modulesRes.json();
+      const usersData = await usersRes.json();
+      
+      setModules(modulesData);
+      setLecturers(usersData.filter((u: any) => u.role === 'lecturer'));
+    } catch (err) {
+      console.error('Error fetching filters:', err);
+      setError('Failed to load filter options');
+    }
+  };
+
   const reportTypeOptions = [
     { value: '', label: 'Select report type' },
     { value: 'attendance', label: 'Attendance Report' },
     { value: 'topics', label: 'Topics Covered Report' },
     { value: 'reschedules', label: 'Rescheduled Sessions Report' },
-    { value: 'completion', label: 'Module Completion Report' },
+    { value: 'bank-details', label: 'Lecturer Bank Details' },
+    { value: 'weekly-schedule', label: 'Weekly Schedule Report' },
   ];
-  
+
   const moduleOptions = [
     { value: 'all', label: 'All Modules' },
-    ...mockModules.map(m => ({
-      value: m.id,
-      label: `${m.code} - ${m.name}`
+    ...modules.map(m => ({
+      value: m.moduleid.toString(),
+      label: `${m.modulecode} - ${m.modulename}`
     }))
   ];
-  
+
+  const lecturerOptions = [
+    { value: 'all', label: 'All Lecturers' },
+    ...lecturers
+      .filter(l => {
+        if (selectedModule === 'all') return true;
+        const moduleIdNum = parseInt(selectedModule);
+        return l.assignedmoduleids && Array.isArray(l.assignedmoduleids) && l.assignedmoduleids.includes(moduleIdNum);
+      })
+      .map(l => ({
+        value: l.userid.toString(),
+        label: l.name
+      }))
+  ];
+
   const formatOptions = [
     { value: 'pdf', label: 'PDF Document' },
     { value: 'excel', label: 'Excel Spreadsheet' },
-    { value: 'csv', label: 'CSV File' },
   ];
-  
-  const handleGeneratePreview = () => {
-    setShowPreview(true);
+
+  const handleGeneratePreview = async () => {
+    if (!reportType) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const queryParams = new URLSearchParams({
+        type: reportType,
+        moduleId: selectedModule,
+        lecturerId: selectedLecturer,
+        startDate,
+        endDate
+      });
+      
+      const res = await fetchWithAuth(`http://localhost:5000/reports/data?${queryParams.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch preview data');
+      
+      const data = await res.json();
+      setPreviewData(data);
+      setShowPreview(true);
+    } catch (err: any) {
+      console.error('Error generating preview:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
-  
-  const handleDownload = () => {
-    alert(`Downloading ${reportType} report as ${format.toUpperCase()}...`);
+
+  const handleDownload = async () => {
+    if (!reportType) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const queryParams = new URLSearchParams({
+        type: reportType,
+        moduleId: selectedModule,
+        lecturerId: selectedLecturer,
+        startDate,
+        endDate,
+        format
+      });
+      
+      const res = await fetchWithAuth(`http://localhost:5000/reports/export?${queryParams.toString()}`);
+      
+      // If response is JSON, it might be an error even with 200 status (unlikely but safe to check)
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to export report');
+      }
+
+      if (!res.ok) throw new Error('Failed to export report');
+      
+      const arrayBuffer = await res.arrayBuffer();
+      // Explicitly set the MIME type based on format to ensure browser consistency
+      const fileBlob = new Blob([arrayBuffer], { 
+        type: format === 'excel' 
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+          : 'application/pdf' 
+      });
+      
+      const url = window.URL.createObjectURL(fileBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportType}_report.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+    } catch (err: any) {
+      console.error('Error downloading report:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
-  
-  // Calculate statistics
-  const totalSessions = mockSessions.length;
-  const completedSessions = mockSessions.filter(s => s.status === 'completed').length;
-  const rescheduledSessions = mockSessions.filter(s => s.status === 'rescheduled').length;
-  const attendanceRate = Math.round((mockSessions.filter(s => s.attended).length / completedSessions) * 100) || 0;
-  
+
+  const renderTableHeaders = () => {
+    if (previewData.length === 0) return null;
+    return (
+      <tr className="border-b-2 border-[#E2E8F0]">
+        {Object.keys(previewData[0]).map((key) => (
+          <th key={key} className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
+            {key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}
+          </th>
+        ))}
+      </tr>
+    );
+  };
+
+  const renderTableRows = () => {
+    return previewData.slice(0, 10).map((row, idx) => (
+      <tr key={idx} className="border-b border-[#E2E8F0]">
+        {Object.values(row).map((val: any, i) => (
+          <td key={i} className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
+            {typeof val === 'boolean' ? (
+              val ? <StatusBadge status="success">Yes</StatusBadge> : <StatusBadge status="neutral">No</StatusBadge>
+            ) : (
+              val?.toString() || ''
+            )}
+          </td>
+        ))}
+      </tr>
+    ));
+  };
+
   return (
     <div className="h-full">
-            
       <div className="flex-1 flex flex-col h-full">
-                
         <main className="flex-1 overflow-y-auto p-[var(--space-xl)]">
           <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
-            {/* Page Title */}
             <div>
               <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
                 Reports & Analytics
               </h1>
               <p className="text-[var(--color-text-secondary)] mt-[var(--space-sm)]">
-                Generate comprehensive reports for attendance, topics, and module completion
+                Generate comprehensive reports for attendance, topics, and bank details
               </p>
             </div>
-            
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-[var(--space-lg)]">
-              <Card padding="lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Total Sessions
-                    </p>
-                    <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {totalSessions}
-                    </h2>
-                  </div>
-                  <Calendar className="w-6 h-6 text-[var(--color-primary)]" />
-                </div>
-              </Card>
-              
-              <Card padding="lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Completed
-                    </p>
-                    <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {completedSessions}
-                    </h2>
-                  </div>
-                  <TrendingUp className="w-6 h-6 text-[var(--color-success)]" />
-                </div>
-              </Card>
-              
-              <Card padding="lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Rescheduled
-                    </p>
-                    <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {rescheduledSessions}
-                    </h2>
-                  </div>
-                  <Clock className="w-6 h-6 text-[var(--color-warning)]" />
-                </div>
-              </Card>
-              
-              <Card padding="lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Attendance Rate
-                    </p>
-                    <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {attendanceRate}%
-                    </h2>
-                  </div>
-                  <FileText className="w-6 h-6 text-[var(--color-info)]" />
-                </div>
-              </Card>
-            </div>
+
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center text-red-700">
+                <AlertCircle className="w-5 h-5 mr-3" />
+                {error}
+              </div>
+            )}
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--space-xl)]">
-              {/* Report Configuration */}
               <div className="lg:col-span-1 space-y-[var(--space-xl)]">
                 <Card>
                   <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
-                    Report Configuration
+                    Configuration
                   </h2>
                   
                   <div className="space-y-[var(--space-lg)]">
@@ -156,6 +243,14 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                       options={moduleOptions}
                       value={selectedModule}
                       onChange={(e) => setSelectedModule(e.target.value)}
+                      fullWidth
+                    />
+
+                    <Select
+                      label="Lecturer"
+                      options={lecturerOptions}
+                      value={selectedLecturer}
+                      onChange={(e) => setSelectedLecturer(e.target.value)}
                       fullWidth
                     />
                     
@@ -190,58 +285,24 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                       size="lg"
                       fullWidth
                       onClick={handleGeneratePreview}
-                      disabled={!reportType}
+                      disabled={!reportType || loading}
                     >
-                      Generate Preview
+                      {loading ? 'Processing...' : 'Generate Preview'}
                     </Button>
                     <Button
                       variant="secondary"
                       size="lg"
                       fullWidth
                       onClick={handleDownload}
-                      disabled={!reportType}
+                      disabled={!reportType || loading}
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Download Report
                     </Button>
                   </div>
                 </Card>
-                
-                {/* Report Descriptions */}
-                <Card>
-                  <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
-                    Report Types
-                  </h3>
-                  <div className="space-y-[var(--space-md)] text-[var(--font-size-small)]">
-                    <div>
-                      <p className="font-medium text-[var(--color-text-primary)]">Attendance Report</p>
-                      <p className="text-[var(--color-text-secondary)] mt-1">
-                        Lecturer attendance records for payroll
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-[var(--color-text-primary)]">Topics Covered</p>
-                      <p className="text-[var(--color-text-secondary)] mt-1">
-                        Session content for academic audits
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-[var(--color-text-primary)]">Reschedules</p>
-                      <p className="text-[var(--color-text-secondary)] mt-1">
-                        Log of all rescheduled sessions
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-[var(--color-text-primary)]">Module Completion</p>
-                      <p className="text-[var(--color-text-secondary)] mt-1">
-                        Progress tracking per module
-                      </p>
-                    </div>
-                  </div>
-                </Card>
               </div>
               
-              {/* Report Preview */}
               <div className="lg:col-span-2">
                 <Card>
                   <div className="flex items-center justify-between mb-[var(--space-lg)]">
@@ -250,133 +311,38 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                     </h2>
                     {showPreview && reportType && (
                       <StatusBadge status="info">
-                        {reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report
+                        {reportTypeOptions.find(o => o.value === reportType)?.label}
                       </StatusBadge>
                     )}
                   </div>
                   
-                  {showPreview && reportType ? (
+                  {showPreview && previewData.length > 0 ? (
                     <div className="space-y-[var(--space-lg)]">
-                      {/* Report Header */}
-                      <div className="p-[var(--space-lg)] bg-[var(--color-bg-sidebar)] rounded-lg">
-                        <h3 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-sm)]">
-                          {reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report
-                        </h3>
-                        <div className="grid grid-cols-2 gap-[var(--space-md)] text-[var(--font-size-small)]">
-                          <div>
-                            <span className="text-[var(--color-text-secondary)]">Period:</span>
-                            <span className="ml-2 font-medium">{startDate} to {endDate}</span>
-                          </div>
-                          <div>
-                            <span className="text-[var(--color-text-secondary)]">Module:</span>
-                            <span className="ml-2 font-medium">
-                              {selectedModule === 'all' ? 'All Modules' : mockModules.find(m => m.id === selectedModule)?.code}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Report Content */}
                       <div className="overflow-x-auto">
                         <table className="w-full" role="table">
                           <thead>
-                            <tr className="border-b-2 border-[#E2E8F0]">
-                              <th className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
-                                Date
-                              </th>
-                              <th className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
-                                Module
-                              </th>
-                              <th className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
-                                Lecturer
-                              </th>
-                              {reportType === 'attendance' && (
-                                <th className="text-center py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
-                                  Status
-                                </th>
-                              )}
-                              {reportType === 'topics' && (
-                                <th className="text-left py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)] font-bold text-[var(--color-text-primary)]">
-                                  Topics Covered
-                                </th>
-                              )}
-                            </tr>
+                            {renderTableHeaders()}
                           </thead>
                           <tbody>
-                            {mockSessions
-                              .filter(s => s.status === 'completed')
-                              .slice(0, 5)
-                              .map((session) => (
-                                <tr key={session.id} className="border-b border-[#E2E8F0]">
-                                  <td className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
-                                    {new Date(session.date).toLocaleDateString()}
-                                  </td>
-                                  <td className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
-                                    {session.moduleCode}
-                                  </td>
-                                  <td className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
-                                    {session.lecturerName}
-                                  </td>
-                                  {reportType === 'attendance' && (
-                                    <td className="py-[var(--space-md)] px-[var(--space-sm)] text-center">
-                                      {session.attended ? (
-                                        <StatusBadge status="success">Present</StatusBadge>
-                                      ) : (
-                                        <StatusBadge status="neutral">Not Recorded</StatusBadge>
-                                      )}
-                                    </td>
-                                  )}
-                                  {reportType === 'topics' && (
-                                    <td className="py-[var(--space-md)] px-[var(--space-sm)] text-[var(--font-size-small)]">
-                                      {session.topicsCovered || 'Not recorded'}
-                                    </td>
-                                  )}
-                                </tr>
-                              ))}
+                            {renderTableRows()}
                           </tbody>
                         </table>
                       </div>
-                      
-                      {/* Report Summary */}
-                      <div className="p-[var(--space-lg)] bg-[var(--color-bg-sidebar)] rounded-lg">
-                        <h4 className="font-bold text-[var(--color-text-primary)] mb-[var(--space-md)]">
-                          Summary
-                        </h4>
-                        <div className="grid grid-cols-3 gap-[var(--space-lg)] text-center">
-                          <div>
-                            <p className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
-                              {completedSessions}
-                            </p>
-                            <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1">
-                              Sessions
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
-                              {mockSessions.reduce((sum, s) => sum + s.duration, 0)}
-                            </p>
-                            <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1">
-                              Total Hours
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
-                              {attendanceRate}%
-                            </p>
-                            <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1">
-                              Recorded
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      {previewData.length > 10 && (
+                        <p className="text-center text-[var(--font-size-small)] text-[var(--color-text-secondary)] italic">
+                          Showing first 10 records. Download the full report for all data.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-[var(--space-2xl)] text-[var(--color-text-secondary)]">
                       <FileText className="w-16 h-16 mx-auto mb-[var(--space-lg)] opacity-50" />
-                      <p className="font-medium">No preview available</p>
-                      <p className="text-[var(--font-size-small)] mt-2">
-                        Select a report type and click "Generate Preview" to see the report data
-                      </p>
+                      <p className="font-medium">{loading ? 'Loading data...' : 'No data available'}</p>
+                      {!loading && (
+                        <p className="text-[var(--font-size-small)] mt-2">
+                          Select filters and click "Generate Preview"
+                        </p>
+                      )}
                     </div>
                   )}
                 </Card>
