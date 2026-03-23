@@ -8,7 +8,7 @@ import { FileUpload } from '../components/FileUpload';
 import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
-  UserX, UserCheck, Clock, Bell
+  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
@@ -60,15 +60,11 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [customMessage, setCustomMessage] = useState('');
   const [selectedMessageLecturers, setSelectedMessageLecturers] = useState<number[]>([]);
   const [sendingMessage, setSendingMessage] = useState(false);
+  // Search and Filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('All Semesters');
 
-  // Create module state
-  const [isCreating, setIsCreating] = useState(false);
-  const [newModuleName, setNewModuleName] = useState('');
-  const [newModuleCode, setNewModuleCode] = useState('');
-  const [newAcademicYear, setNewAcademicYear] = useState('2024/2025');
-  const [newSemester, setNewSemester] = useState('1');
-
-  // Assignment state
+  // Timetable upload
   const [subcoError, setSubcoError] = useState('');
   const [subcoLoading, setSubcoLoading] = useState(false);
   const [selectedSubcoId, setSelectedSubcoId] = useState('');
@@ -169,21 +165,28 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     fetchModuleLecturers(moduleId);
   };
 
-  // ── CREATE MODULE ──────────────────────────────────────────────────────────
-  const handleCreateModule = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDeleteModule = async (id?: number) => {
+    const targetId = id || selectedModuleId;
+    if (!targetId) return;
+    
+    if (!window.confirm('Are you sure you want to delete this module? This will also delete all associated sessions, schedules, and lecturer assignments. This action cannot be undone.')) return;
+
     try {
-      const res = await fetch(`${API}/modules`, {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ moduleCode: newModuleCode, moduleName: newModuleName, academicYear: newAcademicYear, semester: newSemester }),
+      const res = await fetch(`${API}/modules/${targetId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
-      toast.success('Module created!');
-      setIsCreating(false);
-      setNewModuleName(''); setNewModuleCode('');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete module');
+      }
+      toast.success('Module deleted successfully');
+      setView('list');
+      setSelectedModuleId(null);
       await fetchData();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   };
 
   // ── SUB-COORDINATOR ────────────────────────────────────────────────────────
@@ -429,16 +432,24 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   // MODULE LIST VIEW
   // ═══════════════════════════════════════════════════════════════════════════
   if (view === 'list') {
-    const displayModules = isMainCoordinator
-      ? modules
-      : modules.filter(m =>
-          m.subcoordinatorid === (currentUser.userid ?? currentUser.id) ||
-          (m.lecturers || []).some(l => l.id === (currentUser.userid ?? currentUser.id))
-        );
+    const filteredModules = modules.filter(m => {
+      const matchesSearch = 
+        m.modulename.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.modulecode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (m.subcoordinator || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesSemester = selectedSemester === 'All Semesters' || String(m.semester) === selectedSemester;
+      
+      const isAssigned = isMainCoordinator || 
+        m.subcoordinatorid === (currentUser.userid ?? currentUser.id) ||
+        (m.lecturers || []).some(l => l.id === (currentUser.userid ?? currentUser.id));
+        
+      return matchesSearch && matchesSemester && isAssigned;
+    });
 
     return (
       <div ref={scrollRef} className="flex-1 p-[var(--space-xl)] overflow-x-hidden">
-        <div className="max-w-5xl mx-auto space-y-[var(--space-xl)]">
+        <div className="max-w-7xl mx-auto space-y-[var(--space-xl)]">
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-[var(--space-md)]">
             <div>
@@ -448,74 +459,136 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
               </p>
             </div>
             {isMainCoordinator && (
-              <Button variant="primary" size="lg" icon={<Plus className="w-5 h-5" />} onClick={() => setIsCreating(true)}>
+              <Button variant="primary" size="lg" icon={<Plus className="w-5 h-5" />} onClick={() => onNavigate('create-module')}>
                 Create Module
               </Button>
             )}
           </div>
 
-          {/* Create Module Modal */}
-          {isCreating && (
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Create New Module</h2>
-                  <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-                </div>
-                <form onSubmit={handleCreateModule} className="space-y-4">
-                  <Input label="Module Code" value={newModuleCode} onChange={e => setNewModuleCode(e.target.value)} required fullWidth placeholder="e.g. CS3012" />
-                  <Input label="Module Name" value={newModuleName} onChange={e => setNewModuleName(e.target.value)} required fullWidth placeholder="e.g. Software Engineering" />
-                  <Input label="Academic Year" value={newAcademicYear} onChange={e => setNewAcademicYear(e.target.value)} required fullWidth placeholder="e.g. 2024/2025" />
-                  <Select label="Semester" options={[{ value: '1', label: 'Semester 1' }, { value: '2', label: 'Semester 2' }]} value={newSemester} onChange={e => setNewSemester(e.target.value)} fullWidth />
-                  <div className="flex gap-3 pt-2">
-                    <Button type="button" variant="ghost" fullWidth onClick={() => setIsCreating(false)}>Cancel</Button>
-                    <Button type="submit" variant="primary" fullWidth>Create Module</Button>
-                  </div>
-                </form>
+          {/* Filters */}
+          <Card>
+            <div className="flex flex-col md:flex-row gap-[var(--space-md)]">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-text-disabled)]" />
+                <input
+                  type="text"
+                  placeholder="Search modules by code, name, or coordinator..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-shadow"
+                />
+              </div>
+              <div className="w-full md:w-64">
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => setSelectedSemester(e.target.value)}
+                  className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] bg-white"
+                >
+                  <option value="All Semesters">All Semesters</option>
+                  <option value="1">Semester 1</option>
+                  <option value="2">Semester 2</option>
+                </select>
               </div>
             </div>
-          )}
+          </Card>
 
-          {displayModules.length === 0 ? (
+          {/* Create Module page accessible via onNavigate */}
+
+          {filteredModules.length === 0 ? (
             <Card>
               <div className="text-center py-12 text-[var(--color-text-secondary)]">
-                <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No modules found</p>
-                {isMainCoordinator && <p className="text-sm mt-1">Click "Create Module" to get started</p>}
+                <div className="flex flex-col items-center gap-3">
+                    <BookOpen className="w-12 h-12 mx-auto opacity-30" />
+                    <p className="font-medium">No modules found</p>
+                    {searchTerm || selectedSemester !== 'All Semesters' ? (
+                        <p className="text-sm">Try adjusting your filters</p>
+                    ) : (
+                        isMainCoordinator && <p className="text-sm">Click "Create Module" to get started</p>
+                    )}
+                </div>
               </div>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--space-lg)]">
-              {displayModules.map(mod => {
-                const lecCount = (mod.lecturers || []).filter(l => l !== null).length;
-                return (
-                  <button key={mod.moduleid} onClick={() => openDetail(mod.moduleid)} className="text-left group w-full">
-                    <Card className="group-hover:border-[var(--color-primary)] transition-all duration-200 cursor-pointer h-full">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-[var(--color-primary)] bg-blue-50 px-2 py-0.5 rounded-full">{mod.modulecode}</span>
-                            <span className="text-xs text-[var(--color-text-secondary)]">Yr {mod.academicyear} · Sem {mod.semester}</span>
-                          </div>
-                          <h3 className="font-bold text-[var(--color-text-primary)] text-base leading-tight mb-3">{mod.modulename}</h3>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 text-sm">
-                              <User className="w-3.5 h-3.5 text-[var(--color-text-secondary)] flex-shrink-0" />
-                              {mod.subcoordinator ? <span className="text-[var(--color-text-primary)] font-medium truncate">{mod.subcoordinator}</span> : <span className="text-gray-400 italic">No Sub-Coordinator</span>}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <Users className="w-3.5 h-3.5 text-[var(--color-text-secondary)] flex-shrink-0" />
-                              {lecCount > 0 ? <span className="text-[var(--color-text-primary)] font-medium">{lecCount} Lecturer{lecCount !== 1 ? 's' : ''}</span> : <span className="text-gray-400 italic">No Lecturers</span>}
-                            </div>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-[var(--color-primary)] flex-shrink-0 mt-1 transition-colors" />
-                      </div>
-                    </Card>
-                  </button>
-                );
-              })}
-            </div>
+            <Card padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-[var(--color-bg-sidebar)] border-b border-[#E2E8F0] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
+                                <th className="p-[var(--space-md)] font-semibold">Module</th>
+                                <th className="p-[var(--space-md)] font-semibold text-center">Module Details</th>
+                                <th className="p-[var(--space-md)] font-semibold text-center">Staff</th>
+                                <th className="p-[var(--space-md)] font-semibold text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredModules.map(mod => {
+                                const lecCount = (mod.lecturers || []).filter(l => l !== null).length;
+                                return (
+                                    <tr 
+                                        key={mod.moduleid} 
+                                        className="border-b border-[#E2E8F0] last:border-0 hover:bg-[var(--color-bg-main)] transition-colors cursor-pointer group"
+                                        onClick={() => openDetail(mod.moduleid)}
+                                    >
+                                        <td className="p-[var(--space-md)]">
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-primary)] bg-blue-50 px-2 py-0.5 rounded">
+                                                        {mod.modulecode}
+                                                    </span>
+                                                </div>
+                                                <p className="font-bold text-[var(--color-text-primary)]">{mod.modulename}</p>
+                                            </div>
+                                        </td>
+                                        <td className="p-[var(--space-md)] text-center">
+                                            <div className="text-[var(--font-size-small)] space-y-1 inline-flex flex-col items-start">
+                                                <div className="flex items-center gap-2 text-[var(--color-text-primary)]">
+                                                    <Calendar className="w-3.5 h-3.5 text-[var(--color-text-secondary)]" />
+                                                    <span>{mod.academicyear}</span>
+                                                </div>
+                                                <p className="text-[var(--color-text-secondary)] ml-5">Semester {mod.semester}</p>
+                                            </div>
+                                        </td>
+                                        <td className="p-[var(--space-md)] text-center">
+                                            <div className="text-[var(--font-size-small)] space-y-1 inline-flex flex-col items-start">
+                                                <div className="flex items-center gap-2">
+                                                    <UserCheck className="w-3.5 h-3.5 text-[var(--color-text-secondary)]" />
+                                                    {mod.subcoordinator ? (
+                                                        <span className="text-[var(--color-text-primary)] font-medium">{mod.subcoordinator}</span>
+                                                    ) : (
+                                                        <span className="text-gray-400 italic">No Coordinator</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="w-3.5 h-3.5 text-[var(--color-text-secondary)]" />
+                                                    <span className="text-[var(--color-text-secondary)]">{lecCount} Lecturer{lecCount !== 1 ? 's' : ''}</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="p-[var(--space-md)] text-center">
+                                            <div className="flex justify-center items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                                                {isMainCoordinator && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-[var(--color-error)] hover:bg-[#FEE2E2] opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={() => {
+                                                            setSelectedModuleId(mod.moduleid);
+                                                            handleDeleteModule(mod.moduleid);
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                )}
+                                                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-[var(--color-primary)] transition-colors" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
           )}
         </div>
       </div>
@@ -545,15 +618,28 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
           <button onClick={() => { setView('list'); setSelectedModuleId(null); }} className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors mb-4 text-sm font-medium">
             <ArrowLeft className="w-4 h-4" /> Back to Modules
           </button>
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-[var(--color-primary)] rounded-xl flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-5 h-5 text-white" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-[var(--color-primary)] rounded-xl flex items-center justify-center flex-shrink-0">
+                  <BookOpen className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-primary)]">{module.modulecode}</p>
+                  <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module.modulename}</h1>
+                  <p className="text-sm text-[var(--color-text-secondary)]">Academic Year {module.academicyear} · Semester {module.semester}</p>
+                </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--color-primary)]">{module.modulecode}</p>
-              <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module.modulename}</h1>
-              <p className="text-sm text-[var(--color-text-secondary)]">Academic Year {module.academicyear} · Semester {module.semester}</p>
-            </div>
+            {isMainCoordinator && (
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    icon={<Trash2 className="w-4 h-4" />} 
+                    onClick={() => handleDeleteModule()}
+                    className="text-red-500 hover:bg-red-50 hover:text-red-700 font-medium"
+                >
+                    Delete Module
+                </Button>
+            )}
           </div>
         </div>
 

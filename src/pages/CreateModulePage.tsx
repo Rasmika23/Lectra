@@ -5,6 +5,8 @@ import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { useScrollToTop } from '../lib/hooks';
+import { fetchWithAuth } from '../lib/api';
+import { toast } from 'sonner';
 
 interface CreateModulePageProps {
   currentUser: any;
@@ -33,11 +35,11 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
   
   const semesterOptions = [
     { value: '', label: 'Select semester' },
-    { value: 'Semester 1', label: 'Semester 1' },
-    { value: 'Semester 2', label: 'Semester 2' },
+    { value: '1', label: 'Semester 1' },
+    { value: '2', label: 'Semester 2' },
   ];
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCodeError('');
     
@@ -50,20 +52,41 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
     
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await fetchWithAuth('http://localhost:5000/modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleCode,
+          moduleName,
+          academicYear,
+          semester
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create module');
+      }
+
+      toast.success('Module created successfully!');
       setShowSuccess(true);
-      setIsSubmitting(false);
       
-      // Reset form after 3 seconds
+      // Reset form after a delay and navigate back to modules
       setTimeout(() => {
         setModuleName('');
         setModuleCode('');
         setAcademicYear('');
         setSemester('');
         setShowSuccess(false);
-      }, 3000);
-    }, 1000);
+        onNavigate('module-management');
+      }, 2000);
+
+    } catch (error: any) {
+      toast.error(error.message || 'An error occurred');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   return (
@@ -97,7 +120,7 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
             
             {/* Success Message */}
             {showSuccess && (
-              <Card className="bg-[#D1FAE5] border-[var(--color-success)]">
+              <Card className="bg-[#D1FAE5] border-[var(--color-success)] mb-[var(--space-lg)]">
                 <div className="flex items-center gap-[var(--space-md)]">
                   <CheckCircle className="w-6 h-6 text-[var(--color-success)]" />
                   <div>

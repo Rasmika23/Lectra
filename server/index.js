@@ -9,6 +9,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const reportService = require('./services/ReportService');
+const auditLog = require('./services/AuditService');
 
 // ── JWT Auth Middleware ─────────────────────────────────────────────────────
 function authenticateToken(req, res, next) {
@@ -100,7 +101,10 @@ app.post('/login', async (req, res) => {
         { expiresIn: '24h' }
       );
 
-      res.json({ user: userResponse, token });
+      // Record login audit log
+      await auditLog.record(user.userid, 'LOGIN', 'USER', user.userid, { email: user.email }, req);
+
+      res.json({ token, user: userResponse });
     } else {
       res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -146,6 +150,7 @@ app.post('/users/invite', async (req, res) => {
     const emailResult = await sendInviteEmail(email, inviteLink);
 
     if (emailResult.success) {
+      await auditLog.record(req.user ? req.user.id : null, 'INVITE_USER', 'USER', newUser.rows[0].userid, { email, role }, req);
       res.json({ message: 'Invitation sent successfully', userId: newUser.rows[0].userid });
     } else {
       res.status(500).json({ error: 'User created but failed to send email' });
@@ -199,6 +204,8 @@ app.post('/users/setup', async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
+
+      await auditLog.record(user.userid, 'ACCOUNT_SETUP', 'USER', user.userid, { email: user.email }, req);
 
       res.json({ message: 'Account set up successfully', user: userResponse, token });
     } else {
@@ -506,6 +513,8 @@ app.delete('/sessions/:id', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Session not found' });
         }
         
+        const deletedSession = result.rows[0];
+        await auditLog.record(req.user.id, 'DELETE_SESSION', 'SESSION', sessionId, { moduleid: deletedSession.moduleid, datetime: deletedSession.datetime }, req);
         res.json({ message: 'Session deleted successfully' });
     } catch (err) {
         console.error('Error deleting session:', err);
@@ -552,6 +561,7 @@ app.delete('/users/:id', authenticateToken, async (req, res) => {
     const result = await db.query('DELETE FROM users WHERE userid = $1 RETURNING userid', [id]);
 
     if (result.rows.length > 0) {
+      await auditLog.record(req.user.id, 'DELETE_USER', 'USER', id, { targetUserId: id }, req);
       res.json({ message: 'User deleted successfully' });
     } else {
       res.status(404).json({ error: 'User not found' });
@@ -648,7 +658,7 @@ app.get('/modules/:id/schedule', async (req, res) => {
 });
 
 // POST /modules/:id/schedule — add a new slot (sub-coordinator)
-app.post('/modules/:id/schedule', async (req, res) => {
+app.post('/modules/:id/schedule', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { day, starttime, duration, location } = req.body;
   if (!day || !starttime || !duration) {
@@ -660,7 +670,11 @@ app.post('/modules/:id/schedule', async (req, res) => {
       [parseInt(id), day, starttime, parseFloat(duration), location || '']
     );
     await generateSessionsForModule(parseInt(id));
-    res.json(result.rows[0]);
+    
+    const slot = result.rows[0];
+    await auditLog.record(req.user.id, 'ADD_SCHEDULE_SLOT', 'MODULE', parseInt(id), { day, starttime, duration, location }, req);
+    
+    res.json(slot);
   } catch (err) {
     console.error('Error adding schedule slot:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
@@ -668,7 +682,7 @@ app.post('/modules/:id/schedule', async (req, res) => {
 });
 
 // PUT /modules/:id/schedule/:slotId — update a slot (sub-coordinator)
-app.put('/modules/:id/schedule/:slotId', async (req, res) => {
+app.put('/modules/:id/schedule/:slotId', authenticateToken, async (req, res) => {
   const { id, slotId } = req.params;
   const { day, starttime, duration, location } = req.body;
   try {
@@ -678,7 +692,11 @@ app.put('/modules/:id/schedule/:slotId', async (req, res) => {
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Slot not found' });
     await generateSessionsForModule(parseInt(id));
-    res.json(result.rows[0]);
+    
+    const slot = result.rows[0];
+    await auditLog.record(req.user.id, 'UPDATE_SCHEDULE_SLOT', 'MODULE', parseInt(id), { slotId, day, starttime, duration, location }, req);
+    
+    res.json(slot);
   } catch (err) {
     console.error('Error updating slot:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
@@ -691,6 +709,7 @@ app.delete('/modules/:id/schedule/:slotId', async (req, res) => {
   try {
     await db.query('DELETE FROM moduleschedule WHERE scheduleid=$1 AND moduleid=$2', [parseInt(slotId), parseInt(id)]);
     await generateSessionsForModule(parseInt(id));
+    await auditLog.record(req.user ? req.user.id : null, 'DELETE_SCHEDULE_SLOT', 'MODULE', parseInt(id), { slotId }, req);
     res.json({ message: 'Slot deleted and sessions regenerated' });
   } catch (err) {
     console.error('Error deleting slot:', err);
@@ -705,6 +724,7 @@ app.put('/modules/:id/semesterenddate', async (req, res) => {
   try {
     await db.query('UPDATE module SET semesterenddate=$1 WHERE moduleid=$2', [semesterenddate || null, parseInt(id)]);
     await generateSessionsForModule(parseInt(id));
+    await auditLog.record(req.user ? req.user.id : null, 'UPDATE_SEMESTER_END', 'MODULE', parseInt(id), { semesterenddate }, req);
     res.json({ message: 'Semester end date updated and sessions regenerated' });
   } catch (err) {
     console.error('Error updating semester end date:', err);
@@ -754,7 +774,9 @@ app.post('/modules', authenticateToken, async (req, res) => {
       'INSERT INTO module (modulecode, modulename, academicyear, semester) VALUES ($1, $2, $3, $4) RETURNING *',
       [moduleCode, moduleName, academicYear, semester]
     );
-    res.status(201).json(result.rows[0]);
+    const module = result.rows[0];
+    await auditLog.record(req.user.id, 'CREATE_MODULE', 'MODULE', module.moduleid, { code: module.modulecode, name: module.modulename }, req);
+    res.status(201).json(module);
   } catch (err) {
     console.error('Error creating module:', err);
     res.status(500).json({ error: 'Server error creating module' });
@@ -791,10 +813,118 @@ app.patch('/modules/:id/assign-subcoordinator', authenticateToken, async (req, r
     );
     
     if (result.rows.length === 0) return res.status(404).json({ error: 'Module not found' });
-    res.json(result.rows[0]);
+    
+    const moduleData = result.rows[0];
+    await auditLog.record(req.user.id, 'ASSIGN_SUBCO', 'MODULE', moduleId, { subcoordinatorId: subId, moduleCode: moduleData.modulecode }, req);
+    
+    res.json(moduleData);
   } catch (err) {
     console.error('Error assigning sub-coordinator:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+// Delete a module (Main Coordinator)
+app.delete('/modules/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') {
+    return res.status(403).json({ error: 'Access denied. Main Coordinator only.' });
+  }
+
+  const { id } = req.params;
+  const moduleId = parseInt(id);
+
+  if (isNaN(moduleId)) {
+    return res.status(400).json({ error: 'Invalid module ID' });
+  }
+
+  try {
+    await db.query('BEGIN');
+
+    // 1. Delete sessions
+    await db.query('DELETE FROM session WHERE moduleid = $1', [moduleId]);
+
+    // 2. Delete lecturer assignments
+    await db.query('DELETE FROM modulelecturer WHERE moduleid = $1', [moduleId]);
+
+    // 3. Delete schedule slots
+    await db.query('DELETE FROM moduleschedule WHERE moduleid = $1', [moduleId]);
+
+    // 4. Delete the module
+    const result = await db.query('DELETE FROM module WHERE moduleid = $1 RETURNING *', [moduleId]);
+
+    if (result.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const deletedModule = result.rows[0];
+    await auditLog.record(req.user.id, 'DELETE_MODULE', 'MODULE', moduleId, { code: deletedModule.modulecode, name: deletedModule.modulename }, req);
+    await db.query('COMMIT');
+    res.json({ message: 'Module and all associated data deleted successfully' });
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error('Error deleting module:', err);
+    res.status(500).json({ error: 'Server error deleting module: ' + err.message });
+  }
+});
+
+// Get dashboard statistics (Main Coordinator)
+app.get('/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const activeLecturersQuery = `
+      SELECT COUNT(*) FROM users u
+      JOIN roles r ON u.roleid = r.roleid
+      WHERE r.rolename = 'Lecturer'
+    `;
+    const activeSubCoordinatorsQuery = `
+      SELECT COUNT(*) FROM users u
+      JOIN roles r ON u.roleid = r.roleid
+      WHERE r.rolename = 'SubCoordinator'
+    `;
+    const rescheduledSessionsQuery = `
+      SELECT COUNT(*) FROM session
+      WHERE status = 'Rescheduled'
+      AND datetime >= NOW() - INTERVAL '7 days'
+    `;
+    const totalModulesQuery = `SELECT COUNT(*) FROM module`;
+
+    const needingAttentionQuery = `
+      SELECT 
+        m.moduleid, 
+        m.modulecode as code, 
+        m.modulename as name, 
+        m.academicyear, 
+        m.semester,
+        m.subcoordinatorid,
+        (SELECT COUNT(*) FROM modulelecturer ml WHERE ml.moduleid = m.moduleid) as lecturer_count
+      FROM module m
+      WHERE m.subcoordinatorid IS NULL 
+         OR NOT EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid)
+      ORDER BY m.moduleid DESC
+      LIMIT 5
+    `;
+
+    const [lecturersRes, subCoRes, rescheduledRes, modulesRes, attentionRes] = await Promise.all([
+      db.query(activeLecturersQuery),
+      db.query(activeSubCoordinatorsQuery),
+      db.query(rescheduledSessionsQuery),
+      db.query(totalModulesQuery),
+      db.query(needingAttentionQuery)
+    ]);
+
+    res.json({
+      activeLecturers: parseInt(lecturersRes.rows[0].count),
+      activeSubCoordinators: parseInt(subCoRes.rows[0].count),
+      rescheduledSessions: parseInt(rescheduledRes.rows[0].count),
+      totalModules: parseInt(modulesRes.rows[0].count),
+      needingAttention: attentionRes.rows.map(row => ({
+        ...row,
+        lecturer_count: parseInt(row.lecturer_count)
+      }))
+    });
+  } catch (err) {
+    console.error('Error fetching dashboard stats:', err);
+    res.status(500).json({ error: 'Server error fetching stats' });
   }
 });
 
@@ -807,7 +937,11 @@ app.patch('/modules/:id/unassign-subcoordinator', authenticateToken, async (req,
       [parseInt(id)]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Module not found' });
-    res.json(result.rows[0]);
+    
+    const moduleData = result.rows[0];
+    await auditLog.record(req.user.id, 'UNASSIGN_SUBCO', 'MODULE', parseInt(id), { moduleCode: moduleData.modulecode }, req);
+    
+    res.json(moduleData);
   } catch (err) {
     console.error('Error unassigning sub-coordinator:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
@@ -874,7 +1008,12 @@ app.patch('/modules/:id/settings', authenticateToken, async (req, res) => {
       [defaultDay, defaultTime, defaultEndTime, reminderHours, reminderTemplate, moduleId]
     );
 
-    res.json(result.rows[0]);
+    const moduleData = result.rows[0];
+    await auditLog.record(req.user.id, 'UPDATE_MODULE_SETTINGS', 'MODULE', moduleId, { 
+      defaultDay, default_time: defaultTime, default_end_time: defaultEndTime, reminderHours, reminderTemplate 
+    }, req);
+
+    res.json(moduleData);
   } catch (err) {
     console.error('Error updating module settings:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
@@ -1071,6 +1210,7 @@ app.post('/modules/:moduleId/timetable', authenticateToken, upload.single('timet
       return res.status(404).json({ error: 'Module not found' });
     }
 
+    await auditLog.record(req.user.id, 'UPLOAD_TIMETABLE', 'MODULE', parseInt(moduleId), { path: relativePath }, req);
     res.json({
       message: 'Timetable uploaded successfully',
       path: relativePath,
@@ -1215,11 +1355,46 @@ app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
     );
 
     await db.query('COMMIT');
+    await auditLog.record(req.user.id, 'MARK_ATTENDANCE', 'SESSION', sessionId, { topicsCovered: finalTopicsCovered, actualDuration: finalActualDuration }, req);
     res.json({ message: 'Attendance recorded successfully' });
   } catch (err) {
     await db.query('ROLLBACK');
     console.error('Error recording attendance:', err);
     res.status(500).json({ error: 'Server error recording attendance' });
+  }
+});
+
+// --- Audit Log Endpoint ---
+
+app.get('/audit-log', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') {
+    return res.status(403).json({ error: 'Access denied. Main Coordinator only.' });
+  }
+
+  const limit = parseInt(req.query.limit) || 500;
+
+  try {
+    const query = `
+      SELECT 
+        al.log_id,
+        al.action_type,
+        al.target_type,
+        al.target_id,
+        al.details,
+        al.ip_address,
+        al.created_at,
+        u.name as user_name,
+        u.email as user_email
+      FROM audit_log al
+      LEFT JOIN users u ON al.user_id = u.userid
+      ORDER BY al.created_at DESC
+      LIMIT $1
+    `;
+    const result = await db.query(query, [limit]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching audit logs:', err);
+    res.status(500).json({ error: 'Server error fetching audit logs' });
   }
 });
 

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
-import { Users, BookOpen, Calendar, TrendingUp } from 'lucide-react';
-import { mockModules, mockUsers, mockSessions } from '../lib/mockData';
+import { Users, BookOpen, Calendar, TrendingUp, UserCheck } from 'lucide-react';
+import { fetchWithAuth } from '../lib/api';
+import { formatDistanceToNow } from 'date-fns';
 
 interface MainCoordinatorDashboardProps {
   currentUser: any;
@@ -12,17 +13,71 @@ interface MainCoordinatorDashboardProps {
 }
 
 export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: MainCoordinatorDashboardProps) {
-  const totalModules = mockModules.length;
-  const activeLecturers = mockUsers.filter(u => u.role === 'lecturer').length;
-  const upcomingSessions = mockSessions.filter(s => s.status === 'scheduled').length;
-  const completionRate = Math.round((mockSessions.filter(s => s.status === 'completed').length / mockSessions.length) * 100);
-  
-  const recentActivity = [
-    { action: 'New module created', detail: 'COSC 3301 - Machine Learning', time: '2 hours ago' },
-    { action: 'Lecturer assigned', detail: 'Dr. Emily Chen to COSC 2202', time: '5 hours ago' },
-    { action: 'Session completed', detail: 'COSC 2203 - Database Systems', time: '1 day ago' },
-    { action: 'User created', detail: 'New lecturer account for Prof. Michael Brown', time: '2 days ago' },
-  ];
+  const [stats, setStats] = useState({
+    activeLecturers: 0,
+    activeSubCoordinators: 0,
+    rescheduledSessions: 0,
+    totalModules: 0,
+    needingAttention: [] as any[]
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setIsActivitiesLoading(true);
+        
+        const [statsRes, activitiesRes] = await Promise.all([
+          fetchWithAuth('http://localhost:5000/dashboard/stats'),
+          fetchWithAuth('http://localhost:5000/audit-log?limit=5')
+        ]);
+
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
+        }
+
+        if (activitiesRes.ok) {
+          const activitiesData = await activitiesRes.json();
+          setActivities(activitiesData);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+        setIsActivitiesLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const formatActivityMessage = (log: any) => {
+    const { action_type, details, target_type } = log;
+    switch (action_type) {
+      case 'LOGIN': return 'User logged in';
+      case 'CREATE_MODULE': return `Created module ${details.code || ''}`;
+      case 'DELETE_MODULE': return `Deleted module ${details.code || ''}`;
+      case 'INVITE_USER': return `Invited ${details.email} as ${details.role}`;
+      case 'MARK_ATTENDANCE': return `Recorded attendance for session`;
+      case 'UPDATE_MODULE_SETTINGS': return `Updated settings for module`;
+      case 'ADD_SCHEDULE_SLOT': return `Added new schedule slot`;
+      case 'RESCHEDULE_SESSION': return `Rescheduled session`;
+      case 'DELETE_SESSION': return `Cancelled/Deleted a session`;
+      case 'ACCOUNT_SETUP': return `Completed account registration`;
+      default: return action_type.replace(/_/g, ' ').toLowerCase();
+    }
+  };
+
+  const getActivityDetail = (log: any) => {
+    const { details, target_type, target_id } = log;
+    if (details.name || details.code) return `${details.code || ''} ${details.name || ''}`.trim();
+    if (details.email) return details.email;
+    return `${target_type} ${target_id ? '#' + target_id : ''}`;
+  };
   
   return (
     <div className="h-full">
@@ -43,25 +98,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
             
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[var(--space-lg)]">
-              <Card padding="lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Total Modules
-                    </p>
-                    <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {totalModules}
-                    </h2>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-success)] mt-[var(--space-xs)]">
-                      +2 this semester
-                    </p>
-                  </div>
-                  <div className="p-3 bg-[#E0F2FE] rounded-lg">
-                    <BookOpen className="w-6 h-6 text-[var(--color-primary)]" />
-                  </div>
-                </div>
-              </Card>
-              
+              {/* Active Lecturers */}
               <Card padding="lg">
                 <div className="flex items-start justify-between">
                   <div>
@@ -69,10 +106,10 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                       Active Lecturers
                     </p>
                     <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {activeLecturers}
+                      {isLoading ? '...' : stats.activeLecturers}
                     </h2>
                     <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
-                      Across all modules
+                      Total lecturers
                     </p>
                   </div>
                   <div className="p-3 bg-[#D1FAE5] rounded-lg">
@@ -80,18 +117,39 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   </div>
                 </div>
               </Card>
-              
+
+              {/* Active Sub Coordinators */}
               <Card padding="lg">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Upcoming Sessions
+                      Active Sub Coordinators
                     </p>
                     <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {upcomingSessions}
+                      {isLoading ? '...' : stats.activeSubCoordinators}
                     </h2>
                     <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
-                      Next 7 days
+                      Across all modules
+                    </p>
+                  </div>
+                  <div className="p-3 bg-[#DBEAFE] rounded-lg">
+                    <UserCheck className="w-6 h-6 text-[var(--color-info)]" />
+                  </div>
+                </div>
+              </Card>
+
+              {/* Rescheduled Sessions */}
+              <Card padding="lg">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
+                      Rescheduled Sessions
+                    </p>
+                    <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
+                      {isLoading ? '...' : stats.rescheduledSessions}
+                    </h2>
+                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
+                      Last 7 days
                     </p>
                   </div>
                   <div className="p-3 bg-[#FEF3C7] rounded-lg">
@@ -100,21 +158,22 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                 </div>
               </Card>
               
+              {/* Total Modules */}
               <Card padding="lg">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
-                      Completion Rate
+                      Total Modules
                     </p>
                     <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                      {completionRate}%
+                      {isLoading ? '...' : stats.totalModules}
                     </h2>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-success)] mt-[var(--space-xs)]">
-                      +5% from last month
+                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
+                      Total modules managed
                     </p>
                   </div>
-                  <div className="p-3 bg-[#DBEAFE] rounded-lg">
-                    <TrendingUp className="w-6 h-6 text-[var(--color-info)]" />
+                  <div className="p-3 bg-[#E0F2FE] rounded-lg">
+                    <BookOpen className="w-6 h-6 text-[var(--color-primary)]" />
                   </div>
                 </div>
               </Card>
@@ -158,22 +217,29 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--space-xl)]">
               {/* Recent Activity */}
               <Card>
-                <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
-                  Recent Activity
-                </h2>
+                <div className="flex items-center justify-between mb-[var(--space-lg)]">
+                    <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
+                    Recent Activity
+                    </h2>
+                    <Button variant="ghost" size="sm" onClick={() => onNavigate('audit-log')}>View All</Button>
+                </div>
                 <div className="space-y-[var(--space-md)]">
-                  {recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-[var(--space-md)] pb-[var(--space-md)] border-b border-[#E2E8F0] last:border-0">
+                  {isActivitiesLoading ? (
+                    <div className="py-8 text-center text-[var(--color-text-secondary)]">Loading activities...</div>
+                  ) : activities.length === 0 ? (
+                    <div className="py-8 text-center text-[var(--color-text-secondary)]">No recent activities</div>
+                  ) : activities.map((log: any) => (
+                    <div key={log.log_id} className="flex items-start gap-[var(--space-md)] pb-[var(--space-md)] border-b border-[#E2E8F0] last:border-0">
                       <div className="w-2 h-2 bg-[var(--color-primary)] rounded-full mt-2" aria-hidden="true" />
                       <div className="flex-1">
                         <p className="font-medium text-[var(--color-text-primary)]">
-                          {activity.action}
+                          {formatActivityMessage(log)}
                         </p>
                         <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1">
-                          {activity.detail}
+                          {getActivityDetail(log)} • <span className="text-[var(--color-text-primary)]">{log.user_name || 'System'}</span>
                         </p>
                         <p className="text-[var(--font-size-tiny)] text-[var(--color-text-disabled)] mt-1">
-                          {activity.time}
+                          {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
                         </p>
                       </div>
                     </div>
@@ -187,17 +253,21 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                   Modules Needing Attention
                 </h2>
                 <div className="space-y-[var(--space-md)]">
-                  {mockModules.map((module) => (
-                    <div key={module.id} className="flex items-start justify-between p-[var(--space-md)] bg-[var(--color-bg-main)] rounded-lg">
+                  {isLoading ? (
+                    <div className="py-8 text-center text-[var(--color-text-secondary)]">Loading modules...</div>
+                  ) : stats.needingAttention.length === 0 ? (
+                    <div className="py-8 text-center text-[var(--color-text-secondary)]">All modules have staff assigned</div>
+                  ) : stats.needingAttention.map((module: any) => (
+                    <div key={module.moduleid} className="flex items-start justify-between p-[var(--space-md)] bg-[var(--color-bg-main)] rounded-lg hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => onNavigate('module-management')}>
                       <div className="flex-1">
                         <div className="flex items-center gap-[var(--space-sm)] mb-[var(--space-xs)]">
                           <h3 className="font-bold text-[var(--color-text-primary)]">
                             {module.code}
                           </h3>
-                          {!module.subCoordinator && (
+                          {!module.subcoordinatorid && (
                             <StatusBadge status="warning">No Coordinator</StatusBadge>
                           )}
-                          {module.lecturers.length === 0 && (
+                          {module.lecturer_count === 0 && (
                             <StatusBadge status="error">No Lecturers</StatusBadge>
                           )}
                         </div>
@@ -205,7 +275,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                           {module.name}
                         </p>
                         <p className="text-[var(--font-size-tiny)] text-[var(--color-text-disabled)] mt-1">
-                          {module.academicYear} • {module.semester}
+                          {module.academicyear} • Semester {module.semester}
                         </p>
                       </div>
                     </div>

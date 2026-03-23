@@ -19,6 +19,7 @@ import { UserProfilePage } from './pages/UserProfilePage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SetupAccountPage } from './pages/SetupAccountPage';
 import { SubCoordinatorSessionsPage } from './pages/SubCoordinatorSessionsPage';
+import { AuditLogPage } from './pages/AuditLogPage';
 
 type Page =
   | 'login'
@@ -35,6 +36,7 @@ type Page =
   | 'my-lectures'
   | 'lecturer-profile'
   | 'user-profile'
+  | 'audit-log'
   | 'reports';
 
 export default function App() {
@@ -220,6 +222,9 @@ export default function App() {
 
       case 'reports':
         return <ReportsPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+      
+      case 'audit-log':
+        return <AuditLogPage />;
 
       case 'login':
         return <LoginPage onLogin={handleLogin} />;
