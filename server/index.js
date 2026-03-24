@@ -928,6 +928,84 @@ app.get('/dashboard/stats', authenticateToken, async (req, res) => {
   }
 });
 
+// Get dashboard statistics (Sub-Coordinator)
+app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'sub-coordinator') {
+    return res.status(403).json({ error: 'Access denied. Sub-coordinators only.' });
+  }
+
+  const userId = req.user.id;
+  try {
+    // 1. Assigned Modules
+    const modulesQuery = `
+      SELECT moduleid, modulecode, modulename 
+      FROM module 
+      WHERE subcoordinatorid = $1
+    `;
+    
+    // 2. Upcoming Sessions Count
+    const upcomingCountQuery = `
+      SELECT COUNT(*) 
+      FROM session s
+      JOIN module m ON s.moduleid = m.moduleid
+      WHERE m.subcoordinatorid = $1 
+        AND s.datetime >= NOW()
+        AND s.status != 'Completed'
+    `;
+
+    // 3. Missing Attendance Count
+    const missingAttendanceQuery = `
+      SELECT COUNT(*) 
+      FROM session s
+      JOIN module m ON s.moduleid = m.moduleid
+      WHERE m.subcoordinatorid = $1 
+        AND s.datetime < NOW()
+        AND NOT EXISTS (SELECT 1 FROM sessionattendance sa WHERE sa.sessionid = s.sessionid)
+    `;
+
+    // 4. Recent Upcoming Sessions
+    const upcomingSessionsQuery = `
+      SELECT 
+        s.sessionid as id,
+        s.moduleid,
+        m.modulecode,
+        m.modulename,
+        s.datetime,
+        to_char(s.datetime, 'YYYY-MM-DD') as date,
+        to_char(s.datetime, 'HH24:MI') as time,
+        s.duration,
+        s.locationorurl as location,
+        s.status,
+        u.name as lecturername
+      FROM session s
+      JOIN module m ON s.moduleid = m.moduleid
+      LEFT JOIN users u ON s.lecturerid = u.userid
+      WHERE m.subcoordinatorid = $1 
+        AND s.datetime >= NOW()
+        AND s.status != 'Completed'
+      ORDER BY s.datetime ASC
+      LIMIT 5
+    `;
+
+    const [modulesRes, upcomingCountRes, missingRes, sessionsRes] = await Promise.all([
+      db.query(modulesQuery, [userId]),
+      db.query(upcomingCountQuery, [userId]),
+      db.query(missingAttendanceQuery, [userId]),
+      db.query(upcomingSessionsQuery, [userId])
+    ]);
+
+    res.json({
+      assignedModules: modulesRes.rows,
+      upcomingSessionsCount: parseInt(upcomingCountRes.rows[0].count),
+      missingAttendanceCount: parseInt(missingRes.rows[0].count),
+      upcomingSessions: sessionsRes.rows
+    });
+  } catch (err) {
+    console.error('Error fetching sub-coordinator dashboard stats:', err);
+    res.status(500).json({ error: 'Server error fetching dashboard stats' });
+  }
+});
+
 // Unassign sub-coordinator from module
 app.patch('/modules/:id/unassign-subcoordinator', authenticateToken, async (req, res) => {
   const { id } = req.params;
