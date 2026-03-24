@@ -77,9 +77,6 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
             <Card className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-[var(--space-lg)]">
-                  <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                    <User className="w-8 h-8" />
-                  </div>
                   <div>
                     <h2 className="text-[var(--font-size-h2)] font-bold">{currentUser.name}</h2>
                     <p className="opacity-90 mt-1">{currentUser.email}</p>
@@ -88,15 +85,13 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
                     )}
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="md"
-                  className="bg-white text-[var(--color-primary)] hover:bg-opacity-90"
+                <button
+                  className="!bg-white text-[#111111] font-bold px-4 py-2 rounded-lg inline-flex items-center transition-all duration-200 hover:bg-gray-100 hover:shadow-md active:scale-95"
                   onClick={() => onNavigate('lecturer-profile')}
                 >
                   <FileText className="w-4 h-4 mr-2" />
                   Edit Profile
-                </Button>
+                </button>
               </div>
             </Card>
             
@@ -140,7 +135,7 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
                 <p className="text-center py-8">Loading sessions...</p>
               ) : upcomingSessions.length > 0 ? (
                 <div className="space-y-[var(--space-lg)]">
-                  {upcomingSessions.map((session) => (
+                  {upcomingSessions.slice(0, 3).map((session) => (
                     <div
                       key={session.id}
                       className={`p-[var(--space-lg)] rounded-lg border-l-4 ${
@@ -213,7 +208,7 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
                  <p className="text-center py-8">Loading sessions...</p>
               ) : completedSessions.length > 0 ? (
                 <div className="space-y-[var(--space-md)]">
-                  {completedSessions.slice(0, 5).map((session) => (
+                  {completedSessions.slice(0, 3).map((session) => (
                     <div
                       key={session.id}
                       className="p-[var(--space-lg)] bg-[var(--color-bg-main)] rounded-lg"
