@@ -11,12 +11,13 @@ class ReportService {
       SELECT 
         u.userid, u.name, u.email,
         lp.phonenumber, lp.nicnumber,
-        bd.bankname, bd.accountnumber, bd.branch, 
+        b.bankname, bd.accountnumber, bd.branch, 
         bd.accountholdername, bd.bankcountry, bd.swiftbic, bd.iban
       FROM users u
       JOIN roles r ON u.roleid = r.roleid
       LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       LEFT JOIN bankdetails bd ON u.userid = bd.lecturerid
+      LEFT JOIN banks b ON bd.bankid = b.bankid
       WHERE r.rolename = 'Lecturer'
     `;
     const params = [];
@@ -41,7 +42,8 @@ class ReportService {
       SELECT 
         TO_CHAR(s.datetime, 'DD/MM/YYYY HH:mi') as date, 
         s.duration,
-        m.modulecode, m.modulename,
+        m.modulecode, mc.modulename,
+        t.academicyear, t.semester,
         u.name as lecturername,
         CASE 
           WHEN sa.isattended IS TRUE THEN 'Present'
@@ -50,6 +52,8 @@ class ReportService {
         END as status
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       JOIN modulelecturer ml ON s.moduleid = ml.moduleid
       LEFT JOIN sessionattendance sa ON (s.sessionid = sa.sessionid AND ml.lecturerid = sa.lecturerid)
       JOIN users u ON ml.lecturerid = u.userid
@@ -87,11 +91,14 @@ class ReportService {
     let query = `
       SELECT 
         TO_CHAR(s.datetime, 'DD/MM/YYYY HH:mi') as date,
-        m.modulecode, m.modulename,
+        m.modulecode, mc.modulename,
+        t.academicyear, t.semester,
         sd.topicscovered, sd.actual_duration,
         u.name as recordedby
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       JOIN sessiondetails sd ON s.sessionid = sd.sessionid
       LEFT JOIN users u ON sd.recordedby = u.userid
       WHERE s.status = 'Completed'
@@ -130,10 +137,13 @@ class ReportService {
         TO_CHAR(s.previous_datetime, 'DD/MM/YYYY HH:mi') as original_date,
         TO_CHAR(s.datetime, 'DD/MM/YYYY HH:mi') as new_date,
         s.duration,
-        m.modulecode, m.modulename,
+        m.modulecode, mc.modulename,
+        t.academicyear, t.semester,
         u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE s.status = 'Rescheduled'
     `;
@@ -169,9 +179,12 @@ class ReportService {
     let query = `
       SELECT 
         ms.day, ms.starttime, ms.duration, ms.location,
-        m.modulecode, m.modulename
+        m.modulecode, mc.modulename,
+        t.academicyear, t.semester
       FROM moduleschedule ms
       JOIN module m ON ms.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
     `;
     const params = [];
 

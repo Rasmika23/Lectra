@@ -274,11 +274,13 @@ app.get('/lecturers/:id/modules', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(`
-      SELECT m.moduleid, m.modulecode, m.modulename, m.academicyear, m.semester
+      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester
       FROM module m
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       JOIN modulelecturer ml ON m.moduleid = ml.moduleid
       WHERE ml.lecturerid = $1
-      ORDER BY m.academicyear DESC, m.semester, m.modulecode
+      ORDER BY t.academicyear DESC, t.semester, m.modulecode
     `, [parseInt(id)]);
     res.json(result.rows);
   } catch (err) {
@@ -297,7 +299,7 @@ app.get('/modules/:id/sessions', authenticateToken, async (req, res) => {
         s.sessionid as id,
         s.moduleid,
         m.modulecode,
-        m.modulename,
+        mc.modulename,
         s.lecturerid,
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
@@ -311,6 +313,7 @@ app.get('/modules/:id/sessions', authenticateToken, async (req, res) => {
         u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE s.moduleid = $1
       ORDER BY s.datetime ASC
@@ -333,7 +336,7 @@ app.get('/lecturers/:id/sessions', authenticateToken, async (req, res) => {
         s.sessionid as id,
         s.moduleid,
         m.modulecode,
-        m.modulename,
+        mc.modulename,
         s.lecturerid,
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
@@ -346,6 +349,7 @@ app.get('/lecturers/:id/sessions', authenticateToken, async (req, res) => {
         u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       JOIN modulelecturer ml ON m.moduleid = ml.moduleid
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE ml.lecturerid = $1
@@ -373,11 +377,12 @@ app.get('/lecturer/profile', authenticateToken, async (req, res) => {
       SELECT 
         u.userid, u.name, u.email,
         lp.phonenumber, lp.address, lp.nicnumber, lp.cvpath,
-        bd.bankname, bd.accountnumber, bd.branch, 
-        bd.accountholdername, bd.bankcountry, bd.swiftbic, bd.iban
+        b.bankname, bd.accountnumber, bd.branch, 
+        bd.accountholdername, b.country as bankcountry, b.swiftbic, bd.iban
       FROM users u
       LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       LEFT JOIN bankdetails bd ON u.userid = bd.lecturerid
+      LEFT JOIN banks b ON bd.bankid = b.bankid
       WHERE u.userid = $1
     `;
     const result = await db.query(query, [userId]);
@@ -445,18 +450,28 @@ app.post('/lecturer/profile', authenticateToken, async (req, res) => {
     // 2. Update bankdetails if provided
     if (bankDetails) {
       await db.query(`
+        INSERT INTO banks (bankname, swiftbic, country)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (bankname) DO UPDATE SET
+          swiftbic = EXCLUDED.swiftbic,
+          country = EXCLUDED.country
+      `, [bankDetails.bankName, bankDetails.swiftBic, bankDetails.bankCountry]);
+
+      await db.query(`
         INSERT INTO bankdetails (
-          lecturerid, bankname, accountnumber, branch, 
-          accountholdername, bankcountry, swiftbic, iban
+          lecturerid, bankid, accountnumber, branch, 
+          accountholdername, iban
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES (
+          $1, 
+          (SELECT bankid FROM banks WHERE bankname = $2),
+          $3, $4, $5, $6
+        )
         ON CONFLICT (lecturerid) DO UPDATE SET
-          bankname = EXCLUDED.bankname,
+          bankid = EXCLUDED.bankid,
           accountnumber = EXCLUDED.accountnumber,
           branch = EXCLUDED.branch,
           accountholdername = EXCLUDED.accountholdername,
-          bankcountry = EXCLUDED.bankcountry,
-          swiftbic = EXCLUDED.swiftbic,
           iban = EXCLUDED.iban
       `, [
         userId, 
@@ -464,8 +479,6 @@ app.post('/lecturer/profile', authenticateToken, async (req, res) => {
         bankDetails.accountNumber, 
         bankDetails.branch || '',
         bankDetails.accountHolderName,
-        bankDetails.bankCountry,
-        bankDetails.swiftBic,
         bankDetails.iban
       ]);
     }
@@ -477,6 +490,24 @@ app.post('/lecturer/profile', authenticateToken, async (req, res) => {
     console.error('Error updating profile:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
   }
+});
+
+// POST /sessions/:id/send-reminder — manually trigger reminders
+app.post('/sessions/:id/send-reminder', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const sessionId = parseInt(id);
+    
+    if (isNaN(sessionId)) {
+        return res.status(400).json({ error: 'Invalid session ID' });
+    }
+
+    try {
+        await reminderScheduler.triggerManualReminder(sessionId);
+        res.json({ success: true, message: 'Reminder sent successfully' });
+    } catch (err) {
+        console.error('Error sending manual reminder:', err);
+        res.status(500).json({ error: 'Failed to send reminder' });
+    }
 });
 
 // POST /sessions/:id/send-reminder — manually trigger reminders
@@ -591,7 +622,7 @@ async function generateSessionsForModule(moduleId) {
   today.setHours(0, 0, 0, 0);
 
   // Get semester end date
-  const modRes = await db.query('SELECT semesterenddate FROM module WHERE moduleid = $1', [moduleId]);
+  const modRes = await db.query('SELECT t.semesterenddate FROM module m JOIN academic_terms t ON m.termid = t.termid WHERE m.moduleid = $1', [moduleId]);
   if (!modRes.rows.length) return;
   const endDate = modRes.rows[0].semesterenddate;
   if (!endDate) return;
@@ -645,7 +676,7 @@ app.get('/modules/:id/schedule', async (req, res) => {
   try {
     const [slotsRes, modRes] = await Promise.all([
       db.query('SELECT * FROM moduleschedule WHERE moduleid = $1 ORDER BY scheduleid', [parseInt(id)]),
-      db.query('SELECT semesterenddate FROM module WHERE moduleid = $1', [parseInt(id)]),
+      db.query('SELECT t.semesterenddate FROM module m JOIN academic_terms t ON m.termid = t.termid WHERE m.moduleid = $1', [parseInt(id)]),
     ]);
     res.json({
       slots: slotsRes.rows,
@@ -722,7 +753,7 @@ app.put('/modules/:id/semesterenddate', async (req, res) => {
   const { id } = req.params;
   const { semesterenddate } = req.body;
   try {
-    await db.query('UPDATE module SET semesterenddate=$1 WHERE moduleid=$2', [semesterenddate || null, parseInt(id)]);
+    await db.query('UPDATE academic_terms SET semesterenddate=$1 WHERE termid = (SELECT termid FROM module WHERE moduleid=$2)', [semesterenddate || null, parseInt(id)]);
     await generateSessionsForModule(parseInt(id));
     await auditLog.record(req.user ? req.user.id : null, 'UPDATE_SEMESTER_END', 'MODULE', parseInt(id), { semesterenddate }, req);
     res.json({ message: 'Semester end date updated and sessions regenerated' });
@@ -739,11 +770,11 @@ app.get('/modules', authenticateToken, async (req, res) => {
       SELECT 
         m.moduleid, 
         m.modulecode, 
-        m.modulename, 
-        m.academicyear, 
-        m.semester, 
+        mc.modulename, 
+        t.academicyear, 
+        t.semester, 
         m.studenttimetablepath,
-        m.semesterenddate,
+        t.semesterenddate,
         m.reminder_hours,
         m.reminder_template,
         u_sub.name as subcoordinator,
@@ -755,8 +786,10 @@ app.get('/modules', authenticateToken, async (req, res) => {
           WHERE ml.moduleid = m.moduleid
         ) as lecturers
       FROM module m
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       LEFT JOIN users u_sub ON m.subcoordinatorid = u_sub.userid
-      ORDER BY m.academicyear DESC, m.semester DESC, m.modulecode ASC
+      ORDER BY t.academicyear DESC, t.semester DESC, m.modulecode ASC
     `;
     const result = await db.query(query);
     res.json(result.rows);
@@ -770,11 +803,24 @@ app.get('/modules', authenticateToken, async (req, res) => {
 app.post('/modules', authenticateToken, async (req, res) => {
   const { moduleCode, moduleName, academicYear, semester } = req.body;
   try {
+    await db.query(
+      'INSERT INTO module_catalog (modulecode, modulename) VALUES ($1, $2) ON CONFLICT (modulecode) DO UPDATE SET modulename = EXCLUDED.modulename',
+      [moduleCode, moduleName]
+    );
+    const termRes = await db.query(
+      'INSERT INTO academic_terms (academicyear, semester) VALUES ($1, $2) ON CONFLICT (academicyear, semester) DO UPDATE SET academicyear=EXCLUDED.academicyear RETURNING termid',
+      [academicYear, semester]
+    );
+    const termId = termRes.rows[0].termid;
+
     const result = await db.query(
-      'INSERT INTO module (modulecode, modulename, academicyear, semester) VALUES ($1, $2, $3, $4) RETURNING *',
-      [moduleCode, moduleName, academicYear, semester]
+      'INSERT INTO module (modulecode, termid) VALUES ($1, $2) RETURNING *',
+      [moduleCode, termId]
     );
     const module = result.rows[0];
+    module.academicyear = academicYear;
+    module.semester = semester;
+    module.modulename = moduleName;
     await auditLog.record(req.user.id, 'CREATE_MODULE', 'MODULE', module.moduleid, { code: module.modulecode, name: module.modulename }, req);
     res.status(201).json(module);
   } catch (err) {
@@ -797,7 +843,7 @@ app.patch('/modules/:id/assign-subcoordinator', authenticateToken, async (req, r
     // Check if this sub-coordinator is already assigned to a different module
     if (subId) {
       const conflict = await db.query(
-        'SELECT m.moduleid, m.modulename FROM module m WHERE m.subcoordinatorid = $1 AND m.moduleid != $2',
+        'SELECT m.moduleid, mc.modulename FROM module m JOIN module_catalog mc ON m.modulecode = mc.modulecode WHERE m.subcoordinatorid = $1 AND m.moduleid != $2',
         [subId, moduleId]
       );
       if (conflict.rows.length > 0) {
@@ -858,7 +904,8 @@ app.delete('/modules/:id', authenticateToken, async (req, res) => {
     }
 
     const deletedModule = result.rows[0];
-    await auditLog.record(req.user.id, 'DELETE_MODULE', 'MODULE', moduleId, { code: deletedModule.modulecode, name: deletedModule.modulename }, req);
+    const mcResult = await db.query('SELECT modulename FROM module_catalog WHERE modulecode = $1', [deletedModule.modulecode]);
+    await auditLog.record(req.user.id, 'DELETE_MODULE', 'MODULE', moduleId, { code: deletedModule.modulecode, name: mcResult.rows[0]?.modulename }, req);
     await db.query('COMMIT');
     res.json({ message: 'Module and all associated data deleted successfully' });
   } catch (err) {
@@ -892,12 +939,14 @@ app.get('/dashboard/stats', authenticateToken, async (req, res) => {
       SELECT 
         m.moduleid, 
         m.modulecode as code, 
-        m.modulename as name, 
-        m.academicyear, 
-        m.semester,
+        mc.modulename as name, 
+        t.academicyear, 
+        t.semester,
         m.subcoordinatorid,
         (SELECT COUNT(*) FROM modulelecturer ml WHERE ml.moduleid = m.moduleid) as lecturer_count
       FROM module m
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       WHERE m.subcoordinatorid IS NULL 
          OR NOT EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid)
       ORDER BY m.moduleid DESC
@@ -938,8 +987,9 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
   try {
     // 1. Assigned Modules
     const modulesQuery = `
-      SELECT moduleid, modulecode, modulename 
-      FROM module 
+      SELECT m.moduleid, m.modulecode, mc.modulename 
+      FROM module m
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       WHERE subcoordinatorid = $1
     `;
     
@@ -948,6 +998,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
       SELECT COUNT(*) 
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       WHERE m.subcoordinatorid = $1 
         AND s.datetime >= NOW()
         AND s.status != 'Completed'
@@ -958,6 +1009,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
       SELECT COUNT(*) 
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       WHERE m.subcoordinatorid = $1 
         AND s.datetime < NOW()
         AND NOT EXISTS (SELECT 1 FROM sessionattendance sa WHERE sa.sessionid = s.sessionid)
@@ -969,7 +1021,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
         s.sessionid as id,
         s.moduleid,
         m.modulecode,
-        m.modulename,
+        mc.modulename,
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
         to_char(s.datetime, 'HH24:MI') as time,
@@ -979,6 +1031,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
         u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE m.subcoordinatorid = $1 
         AND s.datetime >= NOW()
@@ -1197,7 +1250,7 @@ app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
     const moduleId = parseInt(id);
     if (isNaN(moduleId)) return res.status(400).json({ error: 'Invalid module ID' });
 
-    const moduleCheck = await db.query('SELECT modulename, modulecode FROM module WHERE moduleid = $1', [moduleId]);
+    const moduleCheck = await db.query('SELECT mc.modulename, m.modulecode FROM module m JOIN module_catalog mc ON m.modulecode=mc.modulecode WHERE m.moduleid = $1', [moduleId]);
     if (moduleCheck.rows.length === 0) return res.status(404).json({ error: 'Module not found' });
     const { modulename, modulecode } = moduleCheck.rows[0];
 
@@ -1310,10 +1363,12 @@ app.get('/subcoordinator/modules', authenticateToken, async (req, res) => {
   }
   try {
     const query = `
-      SELECT moduleid, modulecode, modulename, academicyear, semester
-      FROM module
-      WHERE subcoordinatorid = $1
-      ORDER BY academicyear DESC, semester DESC, modulecode ASC
+      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester
+      FROM module m
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
+      WHERE m.subcoordinatorid = $1
+      ORDER BY t.academicyear DESC, t.semester DESC, m.modulecode ASC
     `;
     const result = await db.query(query, [req.user.id]);
     res.json(result.rows);
@@ -1332,7 +1387,7 @@ app.get('/modules/:id/sessions/past', authenticateToken, async (req, res) => {
         s.sessionid,
         s.moduleid,
         m.modulecode,
-        m.modulename,
+        mc.modulename,
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
         to_char(s.datetime, 'HH24:MI') as time,
@@ -1344,6 +1399,7 @@ app.get('/modules/:id/sessions/past', authenticateToken, async (req, res) => {
         EXISTS(SELECT 1 FROM sessionattendance sa WHERE sa.sessionid = s.sessionid) as has_attendance
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
       LEFT JOIN sessiondetails sd ON s.sessionid = sd.sessionid
       WHERE s.moduleid = $1 AND s.datetime <= NOW()
       ORDER BY s.datetime DESC

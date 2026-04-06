@@ -59,7 +59,14 @@ class ReminderScheduler {
     console.log(`[${new Date().toISOString()}] Checking for session reminders...`);
     try {
       // 1. Find all modules that have reminders configured
-      const modulesRes = await db.query('SELECT moduleid, modulecode, modulename, reminder_hours, reminder_template FROM module WHERE reminder_hours IS NOT NULL');
+      const modulesQuery = `
+        SELECT m.moduleid, m.modulecode, mc.modulename, m.reminder_hours, m.reminder_template, t.academicyear, t.semester
+        FROM module m 
+        JOIN module_catalog mc ON m.modulecode = mc.modulecode
+        JOIN academic_terms t ON m.termid = t.termid
+        WHERE reminder_hours IS NOT NULL
+      `;
+      const modulesRes = await db.query(modulesQuery);
       const modules = modulesRes.rows;
 
       if (modules.length === 0) return; // No modules configured for reminders
@@ -137,6 +144,12 @@ class ReminderScheduler {
             if (phone) {
                 await whatsappService.sendMessage(phone, messageText);
             }
+
+            // Log to the reminder table
+            await db.query(
+                'INSERT INTO reminder (sessionid, recipientid, content, senttime) VALUES ($1, $2, $3, NOW())',
+                [session.sessionid, lecturer.lecturerid, messageText]
+            );
         }
 
         // Mark session as reminder sent
@@ -155,7 +168,14 @@ class ReminderScheduler {
       if (sessionRes.rows.length === 0) throw new Error('Session not found');
       
       const session = sessionRes.rows[0];
-      const moduleRes = await db.query('SELECT moduleid, modulecode, modulename, reminder_template FROM module WHERE moduleid = $1', [session.moduleid]);
+      const moduleQuery = `
+        SELECT m.moduleid, m.modulecode, mc.modulename, m.reminder_template, t.academicyear, t.semester
+        FROM module m 
+        JOIN module_catalog mc ON m.modulecode = mc.modulecode
+        JOIN academic_terms t ON m.termid = t.termid 
+        WHERE moduleid = $1
+      `;
+      const moduleRes = await db.query(moduleQuery, [session.moduleid]);
       if (moduleRes.rows.length === 0) throw new Error('Module not found');
       
       const mod = moduleRes.rows[0];

@@ -14,9 +14,11 @@ class SlotFinderService {
     static async getAvailableSlots(sessionId, durationHours, weekOffset) {
         // 1. Fetch Session and Module Info
         const sessionRes = await db.query(`
-      SELECT s.datetime, s.lecturerid, m.moduleid, m.academicyear, m.semester, m.studenttimetablepath
+      SELECT s.datetime, s.lecturerid, m.moduleid, t.academicyear, t.semester, m.studenttimetablepath
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       WHERE s.sessionid = $1
     `, [sessionId]);
 
@@ -143,11 +145,13 @@ class SlotFinderService {
         // 5. Fetch Active Sessions for this 'batch' (same academic year & semester) + same lecturer
         const targetWeekEnd = addDays(targetWeekStart, 7); // up to next Monday 00:00
         const activeSessionsRes = await db.query(`
-      SELECT s.datetime, s.status, s.sessionid, m.modulename, s.lecturerid as sess_lecturerid, s.duration
+      SELECT s.datetime, s.status, s.sessionid, mc.modulename, s.lecturerid as sess_lecturerid, s.duration
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       WHERE (
-        (m.academicyear = $1 AND m.semester = $2) -- Batch collision
+        (t.academicyear = $1 AND t.semester = $2) -- Batch collision
         OR s.lecturerid = $5 -- Specific lecturer assignment
         OR s.moduleid IN (SELECT moduleid FROM modulelecturer WHERE lecturerid = $5) -- Shared sessions for lecturer modules
       )

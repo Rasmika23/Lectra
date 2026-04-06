@@ -129,7 +129,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                       {isLoading ? '...' : stats.activeSubCoordinators}
                     </h2>
                     <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
-                      Across all modules
+                      Total in system
                     </p>
                   </div>
                   <div className="p-3 bg-[#DBEAFE] rounded-lg">
@@ -168,9 +168,7 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
                     <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
                       {isLoading ? '...' : stats.totalModules}
                     </h2>
-                    <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
-                      Total modules managed
-                    </p>
+
                   </div>
                   <div className="p-3 bg-[#E0F2FE] rounded-lg">
                     <BookOpen className="w-6 h-6 text-[var(--color-primary)]" />
