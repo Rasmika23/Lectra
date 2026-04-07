@@ -20,6 +20,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { SetupAccountPage } from './pages/SetupAccountPage';
 import { SubCoordinatorSessionsPage } from './pages/SubCoordinatorSessionsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
+import { TermsManagementPage } from './pages/TermsManagementPage';
 
 type Page =
   | 'login'
@@ -37,6 +38,7 @@ type Page =
   | 'lecturer-profile'
   | 'user-profile'
   | 'audit-log'
+  | 'terms-management'
   | 'reports';
 
 export default function App() {
@@ -190,6 +192,9 @@ export default function App() {
 
       case 'module-management':
         return <ModuleManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+
+      case 'terms-management':
+        return <TermsManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'sub-sessions':
         return <SubCoordinatorSessionsPage currentUser={currentUser} onNavigate={handleNavigate} />;

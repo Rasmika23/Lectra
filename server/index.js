@@ -510,23 +510,6 @@ app.post('/sessions/:id/send-reminder', authenticateToken, async (req, res) => {
     }
 });
 
-// POST /sessions/:id/send-reminder — manually trigger reminders
-app.post('/sessions/:id/send-reminder', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const sessionId = parseInt(id);
-    
-    if (isNaN(sessionId)) {
-        return res.status(400).json({ error: 'Invalid session ID' });
-    }
-
-    try {
-        await reminderScheduler.triggerManualReminder(sessionId);
-        res.json({ success: true, message: 'Reminder sent successfully' });
-    } catch (err) {
-        console.error('Error sending manual reminder:', err);
-        res.status(500).json({ error: 'Failed to send reminder' });
-    }
-});
 
 // DELETE /sessions/:id — delete a specific session
 app.delete('/sessions/:id', authenticateToken, async (req, res) => {
@@ -799,33 +782,155 @@ app.get('/modules', authenticateToken, async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TERM MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Get all terms
+app.get('/terms', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM academic_terms ORDER BY academicyear DESC, semester DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching terms:', err);
+    res.status(500).json({ error: 'Server error fetching terms' });
+  }
+});
+
+// Create a new term
+app.post('/terms', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
+  const { academicyear, semester, semesterenddate } = req.body;
+  try {
+    const result = await db.query(
+      'INSERT INTO academic_terms (academicyear, semester, semesterenddate) VALUES ($1, $2, $3) RETURNING *',
+      [academicyear, semester, semesterenddate || null]
+    );
+    await auditLog.record(req.user.id, 'CREATE_TERM', 'TERM', result.rows[0].termid, { academicyear, semester }, req);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') { // unique violation
+      return res.status(409).json({ error: 'Term with this academic year and semester already exists' });
+    }
+    console.error('Error creating term:', err);
+    res.status(500).json({ error: 'Server error creating term' });
+  }
+});
+
+// Update a term
+app.put('/terms/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
+  const { id } = req.params;
+  const { academicyear, semester, semesterenddate } = req.body;
+  try {
+    const result = await db.query(
+      'UPDATE academic_terms SET academicyear = $1, semester = $2, semesterenddate = $3 WHERE termid = $4 RETURNING *',
+      [academicyear, semester, semesterenddate || null, parseInt(id)]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Term not found' });
+    await auditLog.record(req.user.id, 'UPDATE_TERM', 'TERM', parseInt(id), { academicyear, semester, semesterenddate }, req);
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') { // unique violation
+      return res.status(409).json({ error: 'Term with this academic year and semester already exists' });
+    }
+    console.error('Error updating term:', err);
+    res.status(500).json({ error: 'Server error updating term' });
+  }
+});
+
+// Delete a term
+app.delete('/terms/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
+  const { id } = req.params;
+  try {
+    const checkRes = await db.query('SELECT 1 FROM module WHERE termid = $1', [parseInt(id)]);
+    if (checkRes.rows.length > 0) {
+      return res.status(400).json({ error: 'Cannot delete term because modules are assigned to it' });
+    }
+    const result = await db.query('DELETE FROM academic_terms WHERE termid = $1 RETURNING *', [parseInt(id)]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Term not found' });
+    
+    await auditLog.record(req.user.id, 'DELETE_TERM', 'TERM', parseInt(id), { academicyear: result.rows[0].academicyear, semester: result.rows[0].semester }, req);
+    res.json({ message: 'Term deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting term:', err);
+    res.status(500).json({ error: 'Server error deleting term' });
+  }
+});
+
 // Create new module
 app.post('/modules', authenticateToken, async (req, res) => {
-  const { moduleCode, moduleName, academicYear, semester } = req.body;
+  const { moduleCode, moduleName, termId } = req.body;
   try {
     await db.query(
       'INSERT INTO module_catalog (modulecode, modulename) VALUES ($1, $2) ON CONFLICT (modulecode) DO UPDATE SET modulename = EXCLUDED.modulename',
       [moduleCode, moduleName]
     );
-    const termRes = await db.query(
-      'INSERT INTO academic_terms (academicyear, semester) VALUES ($1, $2) ON CONFLICT (academicyear, semester) DO UPDATE SET academicyear=EXCLUDED.academicyear RETURNING termid',
-      [academicYear, semester]
-    );
-    const termId = termRes.rows[0].termid;
 
     const result = await db.query(
       'INSERT INTO module (modulecode, termid) VALUES ($1, $2) RETURNING *',
       [moduleCode, termId]
     );
     const module = result.rows[0];
-    module.academicyear = academicYear;
-    module.semester = semester;
+    
+    const termRes = await db.query('SELECT academicyear, semester FROM academic_terms WHERE termid = $1', [termId]);
+    if (termRes.rows.length) {
+      module.academicyear = termRes.rows[0].academicyear;
+      module.semester = termRes.rows[0].semester;
+    }
     module.modulename = moduleName;
+
     await auditLog.record(req.user.id, 'CREATE_MODULE', 'MODULE', module.moduleid, { code: module.modulecode, name: module.modulename }, req);
     res.status(201).json(module);
   } catch (err) {
     console.error('Error creating module:', err);
     res.status(500).json({ error: 'Server error creating module' });
+  }
+});
+
+// Update a module
+app.put('/modules/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
+  const { id } = req.params;
+  const { moduleCode, moduleName, termId } = req.body;
+  const moduleId = parseInt(id);
+
+  try {
+    await db.query('BEGIN');
+
+    await db.query(
+      'INSERT INTO module_catalog (modulecode, modulename) VALUES ($1, $2) ON CONFLICT (modulecode) DO UPDATE SET modulename = EXCLUDED.modulename',
+      [moduleCode, moduleName]
+    );
+
+    const result = await db.query(
+      'UPDATE module SET modulecode = $1, termid = $2 WHERE moduleid = $3 RETURNING *',
+      [moduleCode, parseInt(termId), moduleId]
+    );
+
+    if (!result.rows.length) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const moduleData = result.rows[0];
+    
+    const termRes = await db.query('SELECT academicyear, semester, semesterenddate FROM academic_terms WHERE termid = $1', [termId]);
+    if (termRes.rows.length) {
+      moduleData.academicyear = termRes.rows[0].academicyear;
+      moduleData.semester = termRes.rows[0].semester;
+      moduleData.semesterenddate = termRes.rows[0].semesterenddate;
+    }
+    moduleData.modulename = moduleName;
+
+    await auditLog.record(req.user.id, 'UPDATE_MODULE', 'MODULE', moduleData.moduleid, { code: moduleData.modulecode, name: moduleData.modulename }, req);
+    await db.query('COMMIT');
+    res.json(moduleData);
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error('Error updating module:', err);
+    res.status(500).json({ error: 'Server error updating module: ' + err.message });
   }
 });
 

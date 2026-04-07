@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -17,8 +17,7 @@ interface CreateModulePageProps {
 export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateModulePageProps) {
   const [moduleName, setModuleName] = useState('');
   const [moduleCode, setModuleCode] = useState('');
-  const [academicYear, setAcademicYear] = useState('');
-  const [semester, setSemester] = useState('');
+  const [termId, setTermId] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [codeError, setCodeError] = useState('');
@@ -26,17 +25,29 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   useScrollToTop(scrollContainerRef, [showSuccess, codeError]);
 
-  const academicYearOptions = [
-    { value: '', label: 'Select academic year' },
-    { value: '2024/2025', label: '2024/2025' },
-    { value: '2025/2026', label: '2025/2026' },
-    { value: '2026/2027', label: '2026/2027' },
-  ];
-  
-  const semesterOptions = [
-    { value: '', label: 'Select semester' },
-    { value: '1', label: 'Semester 1' },
-    { value: '2', label: 'Semester 2' },
+  const [terms, setTerms] = useState<any[]>([]);
+  const [isLoadingTerms, setIsLoadingTerms] = useState(true);
+
+  useEffect(() => {
+    const fetchTerms = async () => {
+      try {
+        const res = await fetchWithAuth('http://localhost:5000/terms');
+        if (res.ok) setTerms(await res.json());
+      } catch (err) {
+        toast.error('Failed to load terms');
+      } finally {
+        setIsLoadingTerms(false);
+      }
+    };
+    fetchTerms();
+  }, []);
+
+  const termOptions = [
+    { value: '', label: isLoadingTerms ? 'Loading...' : 'Select a term' },
+    ...terms.map(t => ({
+      value: String(t.termid),
+      label: `${t.academicyear} - Semester ${t.semester}`
+    }))
   ];
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,8 +70,7 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
         body: JSON.stringify({
           moduleCode,
           moduleName,
-          academicYear,
-          semester
+          termId: parseInt(termId)
         }),
       });
 
@@ -76,8 +86,7 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
       setTimeout(() => {
         setModuleName('');
         setModuleCode('');
-        setAcademicYear('');
-        setSemester('');
+        setTermId('');
         setShowSuccess(false);
         onNavigate('module-management');
       }, 2000);
@@ -160,22 +169,16 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
                   />
                   
                   <Select
-                    label="Academic Year"
-                    options={academicYearOptions}
-                    value={academicYear}
-                    onChange={(e) => setAcademicYear(e.target.value)}
+                    label="Academic Term"
+                    options={termOptions}
+                    value={termId}
+                    onChange={(e) => setTermId(e.target.value)}
                     required
                     fullWidth
                   />
                   
-                  <Select
-                    label="Semester"
-                    options={semesterOptions}
-                    value={semester}
-                    onChange={(e) => setSemester(e.target.value)}
-                    required
-                    fullWidth
-                  />
+                  {/* Empty div to balance grid */}
+                  <div></div>
                 </div>
                 
                 {/* Next Steps Info */}

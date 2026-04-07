@@ -8,7 +8,7 @@ import { FileUpload } from '../components/FileUpload';
 import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
-  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar
+  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
@@ -50,6 +50,14 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [view, setView] = useState<'list' | 'detail'>('list');
+  const [terms, setTerms] = useState<any[]>([]);
+
+  // Edit Module State
+  const [isEditingModule, setIsEditingModule] = useState(false);
+  const [editModuleCode, setEditModuleCode] = useState('');
+  const [editModuleName, setEditModuleName] = useState('');
+  const [editTermId, setEditTermId] = useState('');
+  const [savingModule, setSavingModule] = useState(false);
 
   // Reminder settings
   const [reminderHours, setReminderHours] = useState('48');
@@ -62,7 +70,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [sendingMessage, setSendingMessage] = useState(false);
   // Search and Filter state
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('All Semesters');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('All Years');
 
   // Timetable upload
   const [subcoError, setSubcoError] = useState('');
@@ -101,13 +109,15 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
 
   const fetchData = async () => {
     try {
-      const [modRes, usersRes] = await Promise.all([
+      const [modRes, usersRes, termsRes] = await Promise.all([
         fetch(`${API}/modules`, { headers: authHeaders() }),
         fetch(`${API}/users`, { headers: authHeaders() }),
+        fetch(`${API}/terms`, { headers: authHeaders() })
       ]);
       if (!modRes.ok || !usersRes.ok) throw new Error('Fetch failed');
       setModules(await modRes.json());
       setUsers(await usersRes.json());
+      if (termsRes && termsRes.ok) setTerms(await termsRes.json());
     } catch (err) { console.error('Failed to fetch data', err); }
   };
 
@@ -147,6 +157,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     const mod = modules.find(m => m.moduleid === moduleId);
     setSelectedModuleId(moduleId);
     setView('detail');
+    setIsEditingModule(false);
     setSubcoError('');
     setSelectedSubcoId('');
     setSelectedLecturerId('');
@@ -186,6 +197,34 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
       await fetchData();
     } catch (err: any) {
       toast.error(err.message);
+    }
+  };
+
+  const handleEditModuleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedModuleId) return;
+    setSavingModule(true);
+    try {
+      const res = await fetch(`${API}/modules/${selectedModuleId}`, {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          moduleCode: editModuleCode,
+          moduleName: editModuleName,
+          termId: parseInt(editTermId)
+        })
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Failed to update module');
+      }
+      toast.success('Module updated successfully');
+      setIsEditingModule(false);
+      await fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSavingModule(false);
     }
   };
 
@@ -438,13 +477,13 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
         m.modulecode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (m.subcoordinator || '').toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesSemester = selectedSemester === 'All Semesters' || String(m.semester) === selectedSemester;
+      const matchesYear = selectedAcademicYear === 'All Years' || m.academicyear === selectedAcademicYear;
       
       const isAssigned = isMainCoordinator || 
         m.subcoordinatorid === (currentUser.userid ?? currentUser.id) ||
         (m.lecturers || []).some(l => l.id === (currentUser.userid ?? currentUser.id));
         
-      return matchesSearch && matchesSemester && isAssigned;
+      return matchesSearch && matchesYear && isAssigned;
     });
 
     return (
@@ -459,9 +498,14 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
               </p>
             </div>
             {isMainCoordinator && (
-              <Button variant="primary" size="lg" icon={<Plus className="w-5 h-5" />} onClick={() => onNavigate('create-module')}>
-                Create Module
-              </Button>
+              <div className="flex gap-[var(--space-sm)]">
+                <Button variant="outline" size="lg" icon={<Calendar className="w-5 h-5" />} onClick={() => onNavigate('terms-management')}>
+                  Manage Terms
+                </Button>
+                <Button variant="primary" size="lg" icon={<Plus className="w-5 h-5" />} onClick={() => onNavigate('create-module')}>
+                  Create Module
+                </Button>
+              </div>
             )}
           </div>
 
@@ -480,13 +524,14 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
               </div>
               <div className="w-full md:w-64">
                 <select
-                  value={selectedSemester}
-                  onChange={(e) => setSelectedSemester(e.target.value)}
+                  value={selectedAcademicYear}
+                  onChange={(e) => setSelectedAcademicYear(e.target.value)}
                   className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] bg-white"
                 >
-                  <option value="All Semesters">All Semesters</option>
-                  <option value="1">Semester 1</option>
-                  <option value="2">Semester 2</option>
+                  <option value="All Years">All Academic Years</option>
+                  {Array.from(new Set(terms.map(t => t.academicyear))).map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -500,7 +545,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                 <div className="flex flex-col items-center gap-3">
                     <BookOpen className="w-12 h-12 mx-auto opacity-30" />
                     <p className="font-medium">No modules found</p>
-                    {searchTerm || selectedSemester !== 'All Semesters' ? (
+                    {searchTerm || selectedAcademicYear !== 'All Years' ? (
                         <p className="text-sm">Try adjusting your filters</p>
                     ) : (
                         isMainCoordinator && <p className="text-sm">Click "Create Module" to get started</p>
@@ -515,7 +560,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                         <thead>
                             <tr className="bg-[var(--color-bg-sidebar)] border-b border-[#E2E8F0] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
                                 <th className="p-[var(--space-md)] font-semibold">Module</th>
-                                <th className="p-[var(--space-md)] font-semibold text-center">Module Details</th>
+                                <th className="p-[var(--space-md)] font-semibold text-center">Term</th>
                                 <th className="p-[var(--space-md)] font-semibold text-center">Staff</th>
                                 <th className="p-[var(--space-md)] font-semibold text-center">Actions</th>
                             </tr>
@@ -615,32 +660,80 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
 
         {/* Back + Header */}
         <div>
-          <button onClick={() => { setView('list'); setSelectedModuleId(null); }} className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors mb-4 text-sm font-medium">
+          <button onClick={() => { setView('list'); setSelectedModuleId(null); setIsEditingModule(false); }} className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors mb-4 text-sm font-medium">
             <ArrowLeft className="w-4 h-4" /> Back to Modules
           </button>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-[var(--color-primary)] rounded-xl flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="w-5 h-5 text-white" />
+          
+          {isEditingModule ? (
+            <Card className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-bold text-[var(--color-text-primary)]">Edit Module Details</h2>
+                <Button variant="ghost" size="sm" icon={<X className="w-5 h-5" />} onClick={() => setIsEditingModule(false)} />
+              </div>
+              <form onSubmit={handleEditModuleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input label="Module Code" value={editModuleCode} onChange={e => setEditModuleCode(e.target.value.toUpperCase())} required fullWidth />
+                  <Input label="Module Name" value={editModuleName} onChange={e => setEditModuleName(e.target.value)} required fullWidth />
+                  <Select 
+                    label="Academic Term" 
+                    options={[
+                      { value: '', label: 'Select a term' },
+                      ...terms.map(t => ({ value: String(t.termid), label: `${t.academicyear} - Semester ${t.semester}` }))
+                    ]} 
+                    value={editTermId} 
+                    onChange={e => setEditTermId(e.target.value)} 
+                    required 
+                    fullWidth 
+                  />
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-[var(--color-primary)]">{module.modulecode}</p>
-                  <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module.modulename}</h1>
-                  <p className="text-sm text-[var(--color-text-secondary)]">Academic Year {module.academicyear} · Semester {module.semester}</p>
+                <div className="flex justify-end gap-2 pt-4 border-t border-[#E2E8F0]">
+                  <Button type="button" variant="ghost" onClick={() => setIsEditingModule(false)}>Cancel</Button>
+                  <Button type="submit" variant="primary" disabled={savingModule}>{savingModule ? 'Saving...' : 'Save Changes'}</Button>
                 </div>
+              </form>
+            </Card>
+          ) : (
+            <div className="flex items-start justify-between gap-3 mb-6">
+              <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-[var(--color-primary)] rounded-xl flex items-center justify-center flex-shrink-0">
+                    <BookOpen className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-primary)]">{module.modulecode}</p>
+                    <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module.modulename}</h1>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Academic Year {module.academicyear} · Semester {module.semester}</p>
+                  </div>
+              </div>
+              {isMainCoordinator && (
+                  <div className="flex gap-2">
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        icon={<Edit2 className="w-4 h-4" />} 
+                        onClick={() => {
+                          setIsEditingModule(true);
+                          setEditModuleCode(module.modulecode);
+                          setEditModuleName(module.modulename);
+                          const currentTerm = terms.find(t => t.academicyear === module.academicyear && String(t.semester) === String(module.semester));
+                          setEditTermId(currentTerm ? String(currentTerm.termid) : '');
+                        }}
+                        className="text-blue-500 hover:bg-blue-50 hover:text-blue-700 font-medium"
+                    >
+                        Edit
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        icon={<Trash2 className="w-4 h-4" />} 
+                        onClick={() => handleDeleteModule()}
+                        className="text-red-500 hover:bg-red-50 hover:text-red-700 font-medium"
+                    >
+                        Delete
+                    </Button>
+                  </div>
+              )}
             </div>
-            {isMainCoordinator && (
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    icon={<Trash2 className="w-4 h-4" />} 
-                    onClick={() => handleDeleteModule()}
-                    className="text-red-500 hover:bg-red-50 hover:text-red-700 font-medium"
-                >
-                    Delete Module
-                </Button>
-            )}
-          </div>
+          )}
         </div>
 
         {/* ── SUB-COORDINATOR (main coordinator only) ── */}

@@ -9,10 +9,10 @@ class ReportService {
     const { moduleId, lecturerId } = filters;
     let query = `
       SELECT 
-        u.userid, u.name, u.email,
+        u.name, u.email,
         lp.phonenumber, lp.nicnumber,
         b.bankname, bd.accountnumber, bd.branch, 
-        bd.accountholdername, bd.bankcountry, bd.swiftbic, bd.iban
+        bd.accountholdername, b.country as bankcountry, b.swiftbic, bd.iban
       FROM users u
       JOIN roles r ON u.roleid = r.roleid
       LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
