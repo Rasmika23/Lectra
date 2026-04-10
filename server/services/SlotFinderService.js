@@ -6,7 +6,7 @@ const { startOfWeek, addDays, startOfDay, addMinutes, isWithinInterval, format, 
 
 class SlotFinderService {
     /**
-     * Generates a 5-Day (Mon-Fri) availability grid from 08:00 to 18:00 in 30-min increments.
+     * Generates a 5-Day (Mon-Fri) availability grid from 08:00 to 22:00 in 30-min increments.
      * @param {number} sessionId 
      * @param {number} durationHours 
      * @param {number} weekOffset 
@@ -29,7 +29,6 @@ class SlotFinderService {
         const { moduleid, academicyear, semester, studenttimetablepath, lecturerid } = sessionRes.rows[0];
 
         // 2. Determine target week dates
-        // startOfWeek(..., { weekStartsOn: 1 }) sets start as Monday
         const today = new Date();
         const targetWeekStart = addDays(startOfWeek(today, { weekStartsOn: 1 }), weekOffset * 7);
 
@@ -38,10 +37,10 @@ class SlotFinderService {
         let grid = daysArr.map((dayName, index) => {
             let currentDayStart = addDays(targetWeekStart, index);
             let slots = [];
-            // 08:00 to 18:00 is 10 hours -> 20 slots of 30 mins
+            // 08:00 to 22:00 is 14 hours -> 28 slots of 30 mins
             let slotTime = addMinutes(startOfDay(currentDayStart), 8 * 60); // 08:00 AM
 
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 28; i++) {
                 const isPast = slotTime < today;
                 slots.push({
                     time: format(slotTime, 'HH:mm'),
@@ -57,23 +56,16 @@ class SlotFinderService {
         // 4. Parse Fixed Schedule (Excel)
         if (studenttimetablepath) {
             const fullPath = path.resolve(__dirname, '..', studenttimetablepath);
-            // console.log('--- SlotFinder: Checking timetable at:', fullPath);
             if (fs.existsSync(fullPath)) {
                 try {
                     const workbook = new ExcelJS.Workbook();
                     await workbook.xlsx.readFile(fullPath);
-                    const worksheet = workbook.worksheets[0]; // first active sheet
+                    const worksheet = workbook.worksheets[0];
 
-                    // Assume structure:
-                    // Row 1: Time | Monday | Tuesday | Wednesday | Thursday | Friday
-                    // Row 2+: 08:00 | SE101 | ...
-
-                    // Find which column corresponds to which day text
                     const dayColumns = {};
                     const headerRow = worksheet.getRow(1);
                     headerRow.eachCell((cell, colNumber) => {
                         const val = cell.text.trim().toLowerCase();
-                        // Support full names and common abbreviations
                         const dayMatch = daysArr.find(d => 
                            d.toLowerCase() === val || 
                            d.toLowerCase().startsWith(val) ||
@@ -83,36 +75,27 @@ class SlotFinderService {
                             dayColumns[dayMatch] = colNumber;
                         }
                     });
-                     // console.log('--- SlotFinder: Detected day columns:', dayColumns);
 
-                    // Iterate rows from row 2 onwards to check times
                     worksheet.eachRow((row, rowNumber) => {
-                        if (rowNumber === 1) return; // skip header
+                        if (rowNumber === 1) return;
                         let timeStr = '';
-                        const timeCell = row.getCell(1); // Assume col 1 is Time
+                        const timeCell = row.getCell(1);
                         if (timeCell.value instanceof Date) {
                             const hh = String(timeCell.value.getUTCHours()).padStart(2, '0');
                             const mm = String(timeCell.value.getUTCMinutes()).padStart(2, '0');
                             timeStr = `${hh}:${mm}`;
                         } else {
-                            // Normalize text time (e.g., "08:00", "8:00 AM", "14.30")
                             let raw = timeCell.text.trim().toLowerCase();
                             if (!raw) return;
-                            
-                            // Replace . with :
                             raw = raw.replace('.', ':');
-                            
-                            // Handle AM/PM
                             let isPM = raw.includes('pm');
                             let isAM = raw.includes('am');
                             let timePart = raw.replace('am', '').replace('pm', '').trim();
                             let parts = timePart.split(':');
                             let h = parseInt(parts[0]);
                             let m = parts.length > 1 ? parseInt(parts[1]) : 0;
-                            
                             if (isPM && h < 12) h += 12;
                             if (isAM && h === 12) h = 0;
-                            
                             if (!isNaN(h)) {
                                 timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
                             }
@@ -120,13 +103,12 @@ class SlotFinderService {
 
                         if (!timeStr) return;
 
-                        // Match against grid
                         for (const [dayName, colNumber] of Object.entries(dayColumns)) {
                             const moduleName = row.getCell(colNumber).text.trim();
                             if (moduleName) {
                                 const dayObj = grid.find(d => d.day === dayName);
                                 if (dayObj) {
-                                                                        const slotObj = dayObj.slots.find(s => s.time === timeStr);
+                                    const slotObj = dayObj.slots.find(s => s.time === timeStr);
                                     if (slotObj) {
                                         slotObj.status = 'BUSY';
                                         slotObj.reason = `Fixed Lecture (${moduleName})`;
@@ -137,13 +119,12 @@ class SlotFinderService {
                     });
                 } catch (err) {
                     console.error('Error parsing excel timetable:', err);
-                    // Don't fail the whole request, maybe just log it
                 }
             }
         }
 
-        // 5. Fetch Active Sessions for this 'batch' (same academic year & semester) + same lecturer
-        const targetWeekEnd = addDays(targetWeekStart, 7); // up to next Monday 00:00
+        // 5. Fetch Active Sessions for this 'batch'
+        const targetWeekEnd = addDays(targetWeekStart, 7);
         const activeSessionsRes = await db.query(`
       SELECT s.datetime, s.status, s.sessionid, mc.modulename, s.lecturerid as sess_lecturerid, s.duration
       FROM session s
@@ -151,9 +132,9 @@ class SlotFinderService {
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
       JOIN academic_terms t ON m.termid = t.termid
       WHERE (
-        (t.academicyear = $1 AND t.semester = $2) -- Batch collision
-        OR s.lecturerid = $5 -- Specific lecturer assignment
-        OR s.moduleid IN (SELECT moduleid FROM modulelecturer WHERE lecturerid = $5) -- Shared sessions for lecturer modules
+        (t.academicyear = $1 AND t.semester = $2)
+        OR s.lecturerid = $5
+        OR s.moduleid IN (SELECT moduleid FROM modulelecturer WHERE lecturerid = $5)
       )
       AND s.status IN ('Scheduled', 'Rescheduled')
       AND s.datetime >= $3 AND s.datetime < $4
@@ -161,16 +142,13 @@ class SlotFinderService {
     `, [academicyear, semester, targetWeekStart, targetWeekEnd, lecturerid, sessionId]);
 
         for (const activeSess of activeSessionsRes.rows) {
-            // Find the slot matching activeSess.datetime
             const sessDate = new Date(activeSess.datetime);
             const sessDayStr = format(sessDate, 'yyyy-MM-dd');
-
             const isLecturerBusy = activeSess.sess_lecturerid === lecturerid;
             const collisionReason = isLecturerBusy
                 ? `Lecturer Busy (${activeSess.modulename})`
                 : `Batch Busy (${activeSess.modulename})`;
 
-            // Get session duration from DB (default 2 if not found/null)
             const sessionDurationHours = parseFloat(activeSess.duration) || 2;
             const slotsToBlock = Math.ceil(sessionDurationHours / 0.5);
 
@@ -187,18 +165,12 @@ class SlotFinderService {
             }
         }
 
-        // 6. Block out durations that don't fit the continuous time requirement
-        // Need roundUp(durationHours / 0.5) continuous slots
+        // 6. Block out durations that don't fit
         const requiredContinuousSlots = Math.ceil(durationHours / 0.5);
-
         grid = grid.map(dayObj => {
-            // Create a new slots array to preserve reference changes
             const newSlots = [...dayObj.slots];
-
             for (let i = 0; i < newSlots.length; i++) {
                 if (newSlots[i].status === 'BUSY') continue;
-
-                // Check if from i to i + requiredContinuousSlots - 1 are all AVAILABLE
                 let hasEnoughTime = true;
                 for (let j = 0; j < requiredContinuousSlots; j++) {
                     if (i + j >= newSlots.length || newSlots[i + j].status === 'BUSY') {
@@ -206,16 +178,11 @@ class SlotFinderService {
                         break;
                     }
                 }
-
                 if (!hasEnoughTime) {
-                    // It's still "AVAILABLE" in that it's empty time, but it doesn't fit the requested duration
-                    // Let's mark it 'SHORT' or 'UNAVAILABLE' to indicate the requested block doesn't fit
                     newSlots[i].status = 'UNAVAILABLE';
                     newSlots[i].reason = 'Insufficient duration';
                 }
             }
-
-            // We only return the fields needed
             return {
                 day: dayObj.day,
                 date: dayObj.date,

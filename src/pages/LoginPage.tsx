@@ -69,13 +69,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <Input
             label="Email Address"
             type="email"
-            placeholder="your.email@university.edu"
+            placeholder="Enter your E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             fullWidth
             autoComplete="email"
-            icon={<Mail />}
           />
 
           <Input
@@ -88,7 +87,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             fullWidth
             autoComplete="current-password"
             error={error}
-            icon={<Lock />}
           />
 
           <div className="flex items-center justify-between">

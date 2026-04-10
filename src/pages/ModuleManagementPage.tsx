@@ -8,7 +8,7 @@ import { FileUpload } from '../components/FileUpload';
 import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
-  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2
+  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2, MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
@@ -405,23 +405,8 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   };
 
   // ── SCHEDULE HELPERS ───────────────────────────────────────────────────────
-  const handleSaveSemesterEnd = async () => {
-    setScheduleLoading(true);
-    try {
-      const res = await fetch(`${API}/modules/${selectedModuleId}/semesterenddate`, {
-        method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ semesterenddate: semesterEndDate }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success('Semester end date saved and sessions updated!');
-      await fetchSchedule(selectedModuleId!);
-    } catch (err: any) { toast.error(err.message); }
-    finally { setScheduleLoading(false); }
-  };
-
   const handleAddSlot = async () => {
-    if (!semesterEndDate) { toast.error('Set a semester end date first'); return; }
+    if (!semesterEndDate) { toast.error('The Main Coordinator must set a semester end date for this term first'); return; }
     setScheduleLoading(true);
     try {
       const res = await fetch(`${API}/modules/${selectedModuleId}/schedule`, {
@@ -668,7 +653,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
             <Card className="mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-bold text-[var(--color-text-primary)]">Edit Module Details</h2>
-                <Button variant="ghost" size="sm" icon={<X className="w-5 h-5" />} onClick={() => setIsEditingModule(false)} />
+                <Button variant="ghost" size="sm" icon={<X className="w-5 h-5" />} onClick={() => setIsEditingModule(false)}>Close</Button>
               </div>
               <form onSubmit={handleEditModuleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -855,57 +840,100 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
           </div>
 
           {/* Semester End Date */}
-          <div className="mb-5">
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">Semester End Date</label>
-            {isSubCoordinator ? (
-              <div className="flex gap-2">
-                <input type="date" className={`flex-1 ${selectClass}`} value={semesterEndDate} onChange={e => setSemesterEndDate(e.target.value)} />
-                <Button variant="outline" disabled={!semesterEndDate || scheduleLoading} onClick={handleSaveSemesterEnd}>Save</Button>
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--color-text-primary)]">
-                {semesterEndDate
-                  ? new Date(semesterEndDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                  : <span className="italic text-gray-400">Not set</span>}
-              </p>
-            )}
+          <div className="mb-10 flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl p-3 px-4">
+            <div className="flex items-center gap-2 text-slate-500">
+              <Calendar className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">End Date</span>
+            </div>
+            <p className="text-sm font-bold text-slate-700">
+              {semesterEndDate
+                ? new Date(semesterEndDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                : <span className="text-amber-500 text-xs font-semibold italic">Awaiting coordinator</span>}
+            </p>
           </div>
 
           {/* Existing Slots */}
-          <div className="space-y-3 mb-4">
+          <div className="space-y-6 mb-10">
             {scheduleSlots.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No schedule slots added yet</p>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+                <Clock className="w-10 h-10 text-slate-300 mb-3" />
+                <p className="text-sm font-medium text-slate-600 mb-1">No schedule slots available</p>
+                <p className="text-xs text-slate-400">Add weekly repeating classes below</p>
+              </div>
             ) : scheduleSlots.map(slot => (
-              <div key={slot.scheduleid} className="p-3 border border-blue-100 bg-blue-50 rounded-xl">
+              <div key={slot.scheduleid} className="group relative bg-white border border-slate-200 hover:border-blue-200 rounded-3xl p-6 transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                 {editingSlotId === slot.scheduleid ? (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="w-full bg-slate-50 p-6 border border-blue-600/20 rounded-2xl">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100">
+                        <Edit2 className="w-4 h-4" />
+                      </div>
+                      <span className="font-black text-sm text-slate-800 uppercase tracking-wider">Modify Schedule Slot</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <select className={selectClass} value={editSlot.day} onChange={e => setEditSlot({ ...editSlot, day: e.target.value })}>
                         {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                       <input type="time" className={selectClass} value={editSlot.starttime?.substring(0, 5) || ''} onChange={e => setEditSlot({ ...editSlot, starttime: e.target.value })} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
                       <select className={selectClass} value={String(editSlot.duration)} onChange={e => setEditSlot({ ...editSlot, duration: e.target.value })}>
                         {DURATIONS.map(d => <option key={d} value={d}>{d}h</option>)}
                       </select>
                       <input type="text" className={selectClass} placeholder="Location / URL" value={editSlot.location || ''} onChange={e => setEditSlot({ ...editSlot, location: e.target.value })} />
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="primary" size="sm" disabled={scheduleLoading} onClick={() => handleUpdateSlot(slot.scheduleid)}>Save</Button>
-                      <Button variant="ghost" size="sm" onClick={() => setEditingSlotId(null)}>Cancel</Button>
+                    <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+                      <Button variant="ghost" size="sm" onClick={() => setEditingSlotId(null)} className="font-bold text-slate-500">Cancel</Button>
+                      <Button variant="primary" size="sm" disabled={scheduleLoading} onClick={() => handleUpdateSlot(slot.scheduleid)} className="font-bold px-6">Save Changes</Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-[var(--color-text-primary)]">{slot.day} at {slot.starttime?.substring(0, 5)}</p>
-                      <p className="text-xs text-[var(--color-text-secondary)]">{slot.duration}h · {slot.location || 'No location set'}</p>
+                  <div className="flex flex-col md:flex-row md:items-center gap-6">
+                    {/* Time & Day Column */}
+                    <div className="flex items-center gap-5 md:pr-10 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 min-w-[200px]">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 rounded-full bg-blue-600 ring-4 ring-blue-50" />
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{slot.day}</span>
+                        </div>
+                        <span className="text-3xl font-black text-slate-800 tracking-tighter">{slot.starttime?.substring(0, 5)}</span>
+                      </div>
                     </div>
+
+                    {/* Details Column */}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex flex-wrap gap-3">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-600 rounded-full border border-slate-100">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-xs font-bold">{slot.duration} Hour Session</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/30 text-blue-700 rounded-full border border-blue-100/50">
+                          <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                          <span className="text-xs font-bold">{slot.location || 'Location Pending'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions Column */}
                     {isSubCoordinator && (
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingSlotId(slot.scheduleid); setEditSlot({ ...slot }); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50" disabled={scheduleLoading} onClick={() => handleDeleteSlot(slot.scheduleid)}>Remove</Button>
+                      <div className="flex items-center gap-2 md:pl-4">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => { setEditingSlotId(slot.scheduleid); setEditSlot({ ...slot }); }}
+                          className="h-10 px-4 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all font-bold text-xs"
+                        >
+                          <Edit2 className="w-4 h-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          disabled={scheduleLoading} 
+                          onClick={() => handleDeleteSlot(slot.scheduleid)}
+                          className="h-10 px-4 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all font-bold text-xs"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Remove
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -916,32 +944,69 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
 
           {/* Add Slot (sub-coordinator only) */}
           {isSubCoordinator && (
-            addingSlot ? (
-              <div className="border-t pt-4 space-y-3">
-                <p className="text-sm font-medium text-[var(--color-text-primary)]">New recurring slot:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <select id="new-slot-day" className={selectClass} value={newSlotDay} onChange={e => setNewSlotDay(e.target.value)}>
-                    {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                  <input type="time" className={selectClass} value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
+            <div className="mt-12">
+              {addingSlot ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 shadow-inner">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+                      <Plus className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-800">Add Schedule Slot</h3>
+                      <p className="text-xs text-slate-500 font-medium">Create a new weekly recurring session</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Day of Week</label>
+                      <select id="new-slot-day" className={selectClass} value={newSlotDay} onChange={e => setNewSlotDay(e.target.value)}>
+                        {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Start Time</label>
+                      <input type="time" className={selectClass} value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Duration</label>
+                      <select id="new-slot-duration" className={selectClass} value={newSlotDuration} onChange={e => setNewSlotDuration(e.target.value)}>
+                        {DURATIONS.map(d => <option key={d} value={d}>{d}h</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Location</label>
+                      <input type="text" className={selectClass} placeholder="Room / URL" value={newSlotLocation} onChange={e => setNewSlotLocation(e.target.value)} />
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end items-center gap-4 pt-6 border-t border-slate-200">
+                    <button onClick={() => setAddingSlot(false)} className="text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors">
+                      Discard
+                    </button>
+                    <Button 
+                      variant="primary" 
+                      size="lg" 
+                      disabled={scheduleLoading || !semesterEndDate} 
+                      onClick={handleAddSlot}
+                      className="px-8 rounded-2xl shadow-xl shadow-blue-100"
+                    >
+                      {scheduleLoading ? 'Saving...' : 'Generate Weekly Sessions'}
+                    </Button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <select id="new-slot-duration" className={selectClass} value={newSlotDuration} onChange={e => setNewSlotDuration(e.target.value)}>
-                    {DURATIONS.map(d => <option key={d} value={d}>{d}h</option>)}
-                  </select>
-                  <input type="text" className={selectClass} placeholder="Location / Room / URL" value={newSlotLocation} onChange={e => setNewSlotLocation(e.target.value)} />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="primary" size="sm" disabled={scheduleLoading || !semesterEndDate} onClick={handleAddSlot}>
-                    {scheduleLoading ? 'Saving...' : 'Add & Generate'}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setAddingSlot(false)}>Cancel</Button>
-                </div>
-                {!semesterEndDate && <p className="text-xs text-amber-600">⚠ Set a semester end date above before adding slots</p>}
-              </div>
-            ) : (
-              <Button variant="outline" size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setAddingSlot(true)}>Add Slot</Button>
-            )
+              ) : (
+                <button 
+                  onClick={() => setAddingSlot(true)}
+                  className="w-full group py-8 border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 rounded-3xl transition-all duration-300 flex flex-col items-center gap-3"
+                >
+                  <div className="w-12 h-12 bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white rounded-2xl flex items-center justify-center transition-all duration-300">
+                    <Plus className="w-6 h-6" />
+                  </div>
+                  <span className="text-sm font-black text-slate-400 group-hover:text-blue-600 tracking-wide">Add Weekly Schedule Slot</span>
+                </button>
+              )}
+            </div>
           )}
 
           {isMainCoordinator && scheduleSlots.length === 0 && (

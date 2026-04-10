@@ -40,6 +40,28 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
   const completedSessions = sessions.filter(s => s.status?.toLowerCase() === 'completed');
+
+  // Calculate 7-day window counts
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  const sevenDaysFromNow = new Date(today);
+  sevenDaysFromNow.setDate(today.getDate() + 7);
+  sevenDaysFromNow.setHours(23, 59, 59, 999);
+  
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 7);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+
+  const upcomingNextWeekCount = upcomingSessions.filter(s => {
+    const d = new Date(s.date);
+    return d >= today && d <= sevenDaysFromNow;
+  }).length;
+
+  const completedLastWeekCount = completedSessions.filter(s => {
+    const d = new Date(s.date);
+    return d >= sevenDaysAgo && d <= now;
+  }).length;
   
   const formatDate = (dateString: string) => {
     if (!dateString) return 'TBD';
@@ -97,22 +119,28 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
             
             {/* Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-[var(--space-lg)]">
-              <Card padding="lg">
+              <Card padding="lg" className="hover:shadow-md transition-shadow">
                 <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
                   Upcoming Sessions
                 </p>
                 <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                  {loading ? '...' : upcomingSessions.length}
+                  {loading ? '...' : upcomingNextWeekCount}
                 </h2>
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
+                  In the next 7 days
+                </p>
               </Card>
               
-              <Card padding="lg">
+              <Card padding="lg" className="hover:shadow-md transition-shadow">
                 <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
                   Sessions Completed
                 </p>
                 <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                  {loading ? '...' : completedSessions.length}
+                  {loading ? '...' : completedLastWeekCount}
                 </h2>
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
+                   In the last 7 days
+                </p>
               </Card>
               
               <Card padding="lg">

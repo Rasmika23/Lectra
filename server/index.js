@@ -274,7 +274,18 @@ app.get('/lecturers/:id/modules', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(`
-      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester
+      SELECT 
+        m.moduleid, 
+        m.modulecode, 
+        mc.modulename, 
+        t.academicyear, 
+        t.semester,
+        (
+          SELECT json_agg(json_build_object('id', u_lect.userid, 'name', u_lect.name))
+          FROM modulelecturer ml
+          JOIN users u_lect ON ml.lecturerid = u_lect.userid
+          WHERE ml.moduleid = m.moduleid
+        ) as lecturers
       FROM module m
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
       JOIN academic_terms t ON m.termid = t.termid
@@ -564,6 +575,53 @@ app.patch('/sessions/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error rescheduling session:', err);
     res.status(500).json({ error: 'Server error updating session' });
+  }
+});
+
+// Assign responsibility for a session
+app.patch('/sessions/:id/assign', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { lecturerid } = req.body; // Can be null for "All"
+
+  try {
+    const sessionId = parseInt(id);
+    if (isNaN(sessionId)) return res.status(400).json({ error: 'Invalid session ID' });
+
+    // Verify requesting lecturer is part of the module
+    const authCheck = await db.query(`
+      SELECT ml.moduleid
+      FROM modulelecturer ml
+      JOIN session s ON ml.moduleid = s.moduleid
+      WHERE s.sessionid = $1 AND ml.lecturerid = $2
+    `, [sessionId, req.user.id]);
+
+    if (authCheck.rows.length === 0 && req.user.role !== 'main-coordinator' && req.user.role !== 'sub-coordinator') {
+      return res.status(403).json({ error: 'Not authorized to assign this session' });
+    }
+
+    const result = await db.query(
+      'UPDATE session SET lecturerid = $1 WHERE sessionid = $2 RETURNING *',
+      [lecturerid || null, sessionId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const targetLecturerName = lecturerid ? 
+      (await db.query('SELECT name FROM users WHERE userid = $1', [lecturerid])).rows[0]?.name : 
+      'All Lecturers';
+
+    await auditLog.record(req.user.id, 'ASSIGN_SESSION', 'SESSION', sessionId, { 
+      lecturerid, 
+      lecturerName: targetLecturerName,
+      moduleid: result.rows[0].moduleid 
+    }, req);
+
+    res.json({ message: 'Session assigned successfully', session: result.rows[0] });
+  } catch (err) {
+    console.error('Error assigning session:', err);
+    res.status(500).json({ error: 'Server error assigning session' });
   }
 });
 

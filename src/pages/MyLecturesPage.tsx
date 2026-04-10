@@ -34,6 +34,7 @@ interface Module {
     modulename: string;
     academicyear: string;
     semester: number | string;
+    lecturers?: { id: number; name: string }[];
 }
 
 interface TimeSlot {
@@ -205,11 +206,32 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
             setShowConfirmModal(false);
             setReschedulingSession(null);
             setSelectedSlot(null);
-            setDuration('');
             fetchSessions(); // Refresh list
         } catch (err) {
             console.error(err);
             toast.error('Failed to reschedule session');
+        }
+    };
+
+    const handleAssignLecturer = async (sessionId: number, targetLecturerId: number | null) => {
+        try {
+            const res = await fetchWithAuth(`${API}/sessions/${sessionId}/assign`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    lecturerid: targetLecturerId
+                })
+            });
+
+            if (!res.ok) throw new Error('Assignment failed');
+
+            toast.success('Responsibility updated');
+            fetchSessions(); // Refresh list to show updated names if any
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to update responsibility');
         }
     };
 
@@ -306,6 +328,24 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                                     </StatusBadge>
                                                                 </div>
                                                                 <p className="text-[var(--color-text-secondary)]">{session.modulename}</p>
+                                                                
+                                                                {/* Responsibility Dropdown */}
+                                                                <div className="mt-4 flex items-center gap-2">
+                                                                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">Responsible:</span>
+                                                                    <select
+                                                                        className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                                                                        value={session.lecturerid || ''}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value === '' ? null : parseInt(e.target.value);
+                                                                            handleAssignLecturer(session.id, val);
+                                                                        }}
+                                                                    >
+                                                                        <option value="">All Lecturers (Shared)</option>
+                                                                        {selectedModule.lecturers?.map(l => (
+                                                                            <option key={l.id} value={l.id}>{l.name}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
                                                             </div>
                                                             <Button variant="outline" size="sm" onClick={() => setReschedulingSession(session)}>
                                                                 Reschedule
