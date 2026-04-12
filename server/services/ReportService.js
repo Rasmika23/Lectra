@@ -188,21 +188,68 @@ class ReportService {
     `;
     const params = [];
 
-    if (moduleId && moduleId !== 'all') {
-      params.push(parseInt(moduleId));
-      query += ` WHERE ms.moduleid = $1`;
+    const result = await db.query(query, params);
+    return result.rows;
+  }
+
+  async getVisitingLecturersReport(filters) {
+    const { moduleId, lecturerId } = filters;
+    let query = `
+      SELECT 
+        u.name, u.email,
+        lp.phonenumber, lp.nicnumber,
+        (SELECT STRING_AGG(mc.modulecode, ', ') 
+         FROM modulelecturer ml 
+         JOIN module m ON ml.moduleid = m.moduleid 
+         JOIN module_catalog mc ON m.modulecode = mc.modulecode
+         WHERE ml.lecturerid = u.userid) as assigned_modules
+      FROM users u
+      JOIN roles r ON u.roleid = r.roleid
+      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
+      WHERE r.rolename = 'Lecturer'
+    `;
+    const params = [];
+
+    if (lecturerId && lecturerId !== 'all') {
+      params.push(parseInt(lecturerId));
+      query += ` AND u.userid = $${params.length}`;
     }
 
-    query += ` ORDER BY CASE 
-      WHEN day = 'Monday' THEN 1
-      WHEN day = 'Tuesday' THEN 2
-      WHEN day = 'Wednesday' THEN 3
-      WHEN day = 'Thursday' THEN 4
-      WHEN day = 'Friday' THEN 5
-      WHEN day = 'Saturday' THEN 6
-      WHEN day = 'Sunday' THEN 7
-    END, ms.starttime`;
+    if (moduleId && moduleId !== 'all') {
+      query += ` AND u.userid IN (SELECT lecturerid FROM modulelecturer WHERE moduleid = $${params.length + 1})`;
+      params.push(parseInt(moduleId));
+    }
 
+    query += ` ORDER BY u.name ASC`;
+    const result = await db.query(query, params);
+    return result.rows;
+  }
+
+  async getModulesReport(filters) {
+    const { moduleId } = filters;
+    let query = `
+      SELECT 
+        m.modulecode, mc.modulename, 
+        t.academicyear, t.semester,
+        sc.name as subcoordinator,
+        (SELECT STRING_AGG(u.name, ', ') 
+         FROM modulelecturer ml 
+         JOIN users u ON ml.lecturerid = u.userid 
+         WHERE ml.moduleid = m.moduleid) as assigned_lecturers
+      FROM module m
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
+      LEFT JOIN users sc ON m.subcoordinatorid = sc.userid
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (moduleId && moduleId !== 'all') {
+      params.push(parseInt(moduleId));
+      query += ` AND m.moduleid = $${params.length}`;
+    }
+
+    query += ` ORDER BY t.academicyear DESC, t.semester DESC, m.modulecode ASC`;
     const result = await db.query(query, params);
     return result.rows;
   }
@@ -261,22 +308,31 @@ class ReportService {
       <html>
         <head>
           <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            h1 { text-align: center; color: #333; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 12px; }
-            th { background-color: #f2f2f2; font-weight: bold; }
-            .header-info { margin-bottom: 20px; font-size: 14px; }
+            body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 40px; color: #334155; line-height: 1.5; }
+            h1 { text-align: center; color: #0f172a; font-size: 26px; margin-bottom: 8px; font-weight: 700; }
+            .header-info { text-align: center; margin-bottom: 30px; color: #64748b; font-size: 13px; }
+            table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); }
+            th, td { padding: 12px 10px; text-align: center; font-size: 10px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; }
+            th:last-child, td:last-child { border-right: none; }
+            tr:last-child td { border-bottom: none; }
+            th { background-color: #f8fafc; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.025em; font-size: 9px; }
+            tr:nth-child(even) { background-color: #fdfdfd; }
+            tr:nth-child(odd) { background-color: #ffffff; }
+            tr:hover { background-color: #f1f5f9; }
+            .summary { margin-top: 30px; border-top: 2px solid #0f172a; padding-top: 15px; }
+            .summary h3 { color: #0f172a; margin-bottom: 12px; font-size: 18px; }
+            .summary p { margin: 4px 0; font-size: 12px; color: #475569; }
+            .summary strong { color: #1e293b; }
           </style>
         </head>
         <body>
           <h1>${title}</h1>
           <div class="header-info">
-            <p>Generated on: ${new Date().toLocaleString()}</p>
+            <p>Generated on: ${new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })}</p>
           </div>
           ${data.length === 0 ? `
-            <div style="text-align: center; margin-top: 50px; color: #666;">
-              <h3>No data available for the selected filters.</h3>
+            <div style="text-align: center; margin-top: 50px; color: #64748b; padding: 40px; border: 2px dashed #e2e8f0; border-radius: 12px;">
+              <h3 style="margin-bottom: 10px;">No data available</h3>
               <p>Please try adjusting your date range or module selection.</p>
             </div>
           ` : `
@@ -289,12 +345,12 @@ class ReportService {
             <tbody>
               ${data.map(row => `
                 <tr>
-                  ${Object.values(row).map(val => `<td>${val === null || val === undefined ? '' : (typeof val === 'boolean' ? (val ? 'Yes' : 'No') : (val.toString().includes('GMT') ? new Date(val).toLocaleDateString() : val))}</td>`).join('')}
+                  ${Object.values(row).map(val => `<td>${val === null || val === undefined ? '' : (typeof val === 'boolean' ? (val ? '<span style="color: #059669; font-weight: bold;">Yes</span>' : '<span style="color: #dc2626;">No</span>') : (val.toString().includes('GMT') ? new Date(val).toLocaleDateString() : val))}</td>`).join('')}
                 </tr>
               `).join('')}
             </tbody>
           </table>
-          <div style="margin-top: 30px; border-top: 2px solid #333; padding-top: 10px;">
+          <div class="summary">
             <h3>Report Summary</h3>
             ${type === 'attendance' ? `
               <p><strong>Total Session Records:</strong> ${data.length}</p>
@@ -309,6 +365,12 @@ class ReportService {
             ` : ''}
             ${type === 'reschedules' ? `
               <p><strong>Total Rescheduled Sessions:</strong> ${data.length}</p>
+            ` : ''}
+            ${type === 'visiting-lecturers' ? `
+              <p><strong>Total Lecturers:</strong> ${data.length}</p>
+            ` : ''}
+            ${type === 'modules' ? `
+              <p><strong>Total Modules:</strong> ${data.length}</p>
             ` : ''}
           </div>
           `}

@@ -15,7 +15,7 @@ export function Card({ children, className = '', padding = 'lg' }: CardProps) {
   };
   
   return (
-    <div className={`bg-[var(--color-bg-surface)] rounded-xl shadow-lg border border-[#E2E8F0] ${paddingClasses[padding]} ${className} hover:shadow-xl hover:border-[var(--color-primary)]/20 transition-all duration-300 hover:-translate-y-1`}>
+    <div className={`bg-[var(--color-bg-surface)] rounded-xl shadow-lg border border-[#E2E8F0] ${paddingClasses[padding]} ${className} hover:shadow-xl hover:border-[var(--color-primary)]/20 transition-all duration-300`}>
       {children}
     </div>
   );

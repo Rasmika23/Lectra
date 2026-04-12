@@ -2,9 +2,10 @@ import React from 'react';
 
 interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  labelClassName?: string;
 }
 
-export function Checkbox({ label, className = '', id, ...props }: CheckboxProps) {
+export function Checkbox({ label, labelClassName = '', className = '', id, ...props }: CheckboxProps) {
   const checkboxId = id || `checkbox-${Math.random().toString(36).substr(2, 9)}`;
   
   return (
@@ -13,7 +14,7 @@ export function Checkbox({ label, className = '', id, ...props }: CheckboxProps)
         type="checkbox"
         id={checkboxId}
         className={`
-          w-5 h-5
+          w-4 h-4
           rounded
           border-2 border-[#CBD5E1]
           text-[var(--color-primary)]
@@ -27,7 +28,7 @@ export function Checkbox({ label, className = '', id, ...props }: CheckboxProps)
       {label && (
         <label
           htmlFor={checkboxId}
-          className="text-[var(--font-size-body)] text-[var(--color-text-primary)] cursor-pointer select-none"
+          className={`text-[var(--font-size-body)] text-[var(--color-text-primary)] cursor-pointer select-none ${labelClassName}`}
         >
           {label}
         </label>

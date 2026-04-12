@@ -8,10 +8,13 @@ import { FileUpload } from '../components/FileUpload';
 import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
-  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2, MapPin
+  UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2, MapPin,
+  Download
 } from 'lucide-react';
+import sampleTimetable from '../assets/Sample Timetable.xlsx';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
+import { AnalogTimePicker } from '../components/AnalogTimePicker';
 
 interface Lecturer { id: number; name: string; email?: string; wants_reminders?: boolean; }
 interface Module {
@@ -42,7 +45,7 @@ interface ModuleManagementPageProps {
 }
 
 const API = 'http://localhost:5000';
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DURATIONS = ['1', '1.5', '2', '3'];
 
 export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: ModuleManagementPageProps) {
@@ -103,7 +106,8 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const getUserId = (u: SystemUser) => u.userid ?? u.id ?? 0;
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  useScrollToTop(scrollRef, [subcoError, uploadMessage]);
+  // Disabled auto-scroll to top for timetable messages as it was disruptive
+  useScrollToTop(scrollRef, []);
 
   const selectClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all";
 
@@ -319,6 +323,37 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
       await fetchData();
     } catch (err: any) { setUploadMessage('Error: ' + err.message); }
     finally { setIsUploading(false); }
+  };
+
+  const handleDeleteTimetable = async () => {
+    if (!selectedModuleId) return;
+    if (!window.confirm('Are you sure you want to delete the uploaded timetable?')) return;
+    
+    try {
+      const res = await fetch(`${API}/modules/${selectedModuleId}/timetable`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      
+      if (!res.ok) {
+        let errorMessage = 'Failed to delete timetable';
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch (parseError) {
+          const text = await res.text();
+          errorMessage = text || res.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      toast.success('Timetable deleted successfully');
+      await fetchData();
+    } catch (err: any) {
+      toast.error(err.message.length > 100 
+        ? 'Server error: The deletion request failed (ensure the backend server is restarted).' 
+        : 'Failed to delete timetable: ' + err.message);
+    }
   };
 
   // ── REMINDERS ──────────────────────────────────────────────────────────────
@@ -680,9 +715,6 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
           ) : (
             <div className="flex items-start justify-between gap-3 mb-6">
               <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-[var(--color-primary)] rounded-xl flex items-center justify-center flex-shrink-0">
-                    <BookOpen className="w-5 h-5 text-white" />
-                  </div>
                   <div>
                     <p className="text-sm font-semibold text-[var(--color-primary)]">{module.modulecode}</p>
                     <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module.modulename}</h1>
@@ -843,7 +875,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
           <div className="mb-10 flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl p-3 px-4">
             <div className="flex items-center gap-2 text-slate-500">
               <Calendar className="w-4 h-4" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">End Date</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Term End Date</span>
             </div>
             <p className="text-sm font-bold text-slate-700">
               {semesterEndDate
@@ -874,7 +906,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                       <select className={selectClass} value={editSlot.day} onChange={e => setEditSlot({ ...editSlot, day: e.target.value })}>
                         {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
-                      <input type="time" className={selectClass} value={editSlot.starttime?.substring(0, 5) || ''} onChange={e => setEditSlot({ ...editSlot, starttime: e.target.value })} />
+                      <AnalogTimePicker 
+                        value={editSlot.starttime?.substring(0, 5) || '09:00'} 
+                        onChange={val => setEditSlot({ ...editSlot, starttime: val })} 
+                      />
                       <select className={selectClass} value={String(editSlot.duration)} onChange={e => setEditSlot({ ...editSlot, duration: e.target.value })}>
                         {DURATIONS.map(d => <option key={d} value={d}>{d}h</option>)}
                       </select>
@@ -964,10 +999,11 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                         {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Start Time</label>
-                      <input type="time" className={selectClass} value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
-                    </div>
+                    <AnalogTimePicker 
+                      label="Start Time"
+                      value={newSlotTime} 
+                      onChange={setNewSlotTime} 
+                    />
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Duration</label>
                       <select id="new-slot-duration" className={selectClass} value={newSlotDuration} onChange={e => setNewSlotDuration(e.target.value)}>
@@ -1114,21 +1150,50 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
         {/* ── TIMETABLE (Sub-Coordinator only) ── */}
         {isSubCoordinator && (
           <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <Upload className="w-5 h-5 text-[var(--color-primary)]" />
-              <h2 className="font-bold text-[var(--color-text-primary)]">Student Timetable</h2>
-            </div>
-            {module.studenttimetablepath && (
-              <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span className="text-sm text-green-700">Uploaded: {module.studenttimetablepath.split('/').pop()}</span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-[var(--color-primary)]" />
+                <h2 className="font-bold text-[var(--color-text-primary)]">Student Timetable</h2>
               </div>
-            )}
-            <FileUpload label="Upload timetable (.xlsx)" accept=".xlsx,.xls" onChange={f => setTimetableFile(f || null)} />
-            {timetableFile && (
-              <Button variant="primary" className="mt-3" onClick={handleUploadTimetable} disabled={isUploading}>
-                {isUploading ? 'Uploading...' : 'Upload Timetable'}
-              </Button>
+              <a 
+                href={sampleTimetable} 
+                download="Sample Timetable.xlsx"
+                className="flex items-center gap-2 text-xs font-bold text-[var(--color-primary)] hover:text-[var(--color-secondary)] transition-colors bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download Sample
+              </a>
+            </div>
+            {module.studenttimetablepath ? (
+              <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between gap-2 group/file">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span className="text-sm text-green-700 font-medium">
+                    Current Timetable: {module.studenttimetablepath.split('/').pop()}
+                  </span>
+                </div>
+                <button 
+                  onClick={handleDeleteTimetable}
+                  className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover/file:opacity-100"
+                  title="Delete timetable"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <FileUpload 
+                  label="Upload timetable (.xlsx)" 
+                  accept=".xlsx,.xls" 
+                  value={timetableFile}
+                  onChange={f => setTimetableFile(f || null)} 
+                />
+                {timetableFile && (
+                  <Button variant="primary" className="mt-3 w-full" onClick={handleUploadTimetable} disabled={isUploading}>
+                    {isUploading ? 'Uploading...' : 'Upload Timetable'}
+                  </Button>
+                )}
+              </>
             )}
             {uploadMessage && (
               <p className={`mt-2 text-sm ${uploadMessage.includes('success') || uploadMessage.includes('Success') ? 'text-green-600' : 'text-red-500'}`}>{uploadMessage}</p>

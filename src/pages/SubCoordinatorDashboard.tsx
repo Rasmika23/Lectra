@@ -64,17 +64,17 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
             {/* Page Title */}
             <div>
               <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
-                Sub Coordinator Dashboard
+                Dashboard
               </h1>
               <p className="text-[var(--color-text-secondary)] mt-[var(--space-sm)]">
-                Manage your assigned modules and track lecturer sessions
+                Manage your assigned modules and track sessions
               </p>
             </div>
             
             {/* Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-[var(--space-lg)]">
               <Card padding="lg" className="hover:shadow-md transition-shadow">
-                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)] opacity-80">
                   Assigned Module
                 </p>
                 <div className="flex flex-col gap-2">
@@ -90,32 +90,32 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
                     </h2>
                   )}
                 </div>
-                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)] opacity-80">
                    Currently managing
                 </p>
               </Card>
               
               <Card padding="lg" className="hover:shadow-md transition-shadow">
-                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)] opacity-80">
                   Upcoming Sessions
                 </p>
                 <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
                   {upcomingCount}
                 </h2>
-                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)]">
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-[var(--space-xs)] opacity-80">
                   Total scheduled
                 </p>
               </Card>
               
               <Card padding="lg" className="hover:shadow-md transition-shadow">
-                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)]">
+                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mb-[var(--space-sm)] opacity-80">
                   Missing Attendance
                 </p>
                 <h2 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">
                   {missingAttendance}
                 </h2>
                 {missingAttendance > 0 ? (
-                  <p className="text-[var(--font-size-small)] text-[var(--color-error)] mt-[var(--space-xs)] font-medium">
+                  <p className="text-[var(--font-size-small)] text-[var(--color-error)] mt-[var(--space-xs)] opacity-80">
                     Needs recording
                   </p>
                 ) : (
@@ -191,7 +191,7 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
             
             {/* Quick Actions */}
             <Card>
-              <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
+              <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)] pb-7">
                 Quick Actions
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-[var(--space-md)]">
@@ -216,7 +216,7 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
                 <Button
                   variant="outline"
                   size="lg"
-                  className="!py-6 flex flex-col gap-2 hover:bg-gray-50 transition-colors"
+                  className="!py-6 flex flex-col gap-2 hover:bg-blue-50 hover:!text-black"
                   onClick={() => onNavigate('reports')}
                 >
                   <div className="font-bold">View Reports</div>
@@ -229,4 +229,4 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
       </div>
     </div>
   );
-}
+}

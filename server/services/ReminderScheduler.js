@@ -126,7 +126,7 @@ class ReminderScheduler {
 
         for (const lecturer of lecturersRes.rows) {
             // Customize template if provided, else generic message
-            let messageText = mod.reminder_template || `Reminder: You have an upcoming session for {moduleCode} - {moduleName} scheduled at {sessionDate}.`;
+            let messageText = mod.reminder_template || `Reminder:\n\n You have an upcoming session for {moduleCode} - {moduleName} scheduled at {sessionDate}.\n\n_Lectra VLMS_`;
             // Simple string replacements
             messageText = messageText.replace('{lecturerName}', lecturer.name)
                                      .replace('{sessionDate}', sessionDateStr)

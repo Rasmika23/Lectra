@@ -63,21 +63,11 @@ export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProp
 
   return (
     <aside
-      className="w-64 bg-gradient-to-b from-[var(--color-bg-surface)] to-[var(--color-bg-sidebar)]/30 border-r border-[#E2E8F0] flex flex-col shadow-lg"
+      className="w-64 bg-[var(--color-bg-sidebar)] border-r border-[#E2E8F0] flex flex-col shadow-lg"
       aria-label="Main navigation"
     >
-      {/* Logo */}
-      <div className="p-[var(--space-lg)] border-b border-[#E2E8F0] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white">
-        <h1 className="text-[var(--font-size-h2)] font-bold animate-[fadeIn_0.5s_ease-out]">
-          Lectra
-        </h1>
-        <p className="text-[var(--font-size-small)] mt-1 opacity-90">
-          Lecturer Management
-        </p>
-      </div>
-
       {/* Navigation */}
-      <nav className="flex-1 p-[var(--space-md)]" aria-label="Sidebar navigation">
+      <nav className="flex-1 px-[var(--space-sm)] py-[var(--space-md)] pt-[var(--space-xl)] overflow-y-auto" aria-label="Sidebar navigation">
         <ul className="space-y-[var(--space-xs)]">
           {navItems.map((item, index) => {
             const isActive = currentPage === item.href;
@@ -89,42 +79,22 @@ export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProp
                     w-full flex items-center gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-sm)]
                     rounded-xl text-left transition-all duration-300 group relative overflow-hidden
                     ${isActive
-                      ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white shadow-lg transform scale-105'
-                      : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-sidebar)] hover:translate-x-1'
+                      ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white shadow-lg'
+                      : 'text-[var(--color-text-primary)] hover:bg-white/50 hover:translate-x-1'
                     }
                   `}
                   aria-current={isActive ? 'page' : undefined}
                 >
-                  <span className={`${isActive ? 'animate-[float_2s_ease-in-out_infinite]' : 'group-hover:scale-110 transition-transform duration-200'}`}>
+                  <span className="">
                     {item.icon}
                   </span>
                   <span className="font-medium">{item.label}</span>
-                  {isActive && (
-                    <span className="absolute right-0 top-0 bottom-0 w-1 bg-white rounded-l-full"></span>
-                  )}
                 </button>
               </li>
             );
           })}
         </ul>
       </nav>
-
-      {/* Logout */}
-      <div className="p-[var(--space-md)] border-t border-[#E2E8F0]">
-        <button
-          onClick={() => {
-            if (onLogout) {
-              onLogout();
-            } else {
-              onNavigate('login');
-            }
-          }}
-          className="w-full flex items-center gap-[var(--space-md)] px-[var(--space-md)] py-[var(--space-sm)] rounded-lg text-left text-[var(--color-error)] hover:bg-[#FEE2E2] transition-all duration-200"
-        >
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium">Logout</span>
-        </button>
-      </div>
     </aside>
   );
 }

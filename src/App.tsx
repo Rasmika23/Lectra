@@ -256,19 +256,24 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[var(--color-bg-main)]">
+    <div className="h-screen flex flex-col bg-[var(--color-bg-main)]">
       {currentUser && currentPage !== 'login' && currentPage !== 'setup-account' ? (
         <>
-          <Sidebar role={currentUser.role} currentPage={currentPage} onNavigate={handleNavigate} onLogout={handleLogout} />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Header userName={currentUser.name} userRole={getDisplayRole(currentUser.role)} />
-            <main className="flex-1 overflow-y-auto w-full">
+          <Header 
+            userName={currentUser.name} 
+            userRole={getDisplayRole(currentUser.role)} 
+            onLogout={handleLogout}
+            onProfileClick={() => handleNavigate('user-profile')}
+          />
+          <div className="flex flex-1 overflow-hidden">
+            <Sidebar role={currentUser.role} currentPage={currentPage} onNavigate={handleNavigate} />
+            <main className="flex-1 overflow-y-auto w-full pb-8">
               {renderPage()}
             </main>
           </div>
         </>
       ) : (
-        <div className="w-full h-full">
+        <div className="w-full h-full overflow-y-auto">
           {renderPage()}
         </div>
       )}

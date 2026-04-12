@@ -6,6 +6,7 @@ interface FileUploadProps {
   accept?: string;
   maxSize?: number; // in MB
   onChange?: (file: File | null) => void;
+  value?: File | null;
   helperText?: string;
   error?: string;
 }
@@ -15,10 +16,15 @@ export function FileUpload({
   accept,
   maxSize = 10,
   onChange,
+  value,
   helperText,
   error,
 }: FileUploadProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [internalFile, setInternalFile] = useState<File | null>(null);
+  
+  // Use the provided value if available, otherwise use internal state
+  const selectedFile = value !== undefined ? value : internalFile;
+  const setSelectedFile = value !== undefined ? (f: File | null) => onChange?.(f) : setInternalFile;
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   

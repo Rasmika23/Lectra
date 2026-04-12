@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, UserCircle, User, LogOut, ChevronDown } from 'lucide-react';
+import logo from '@/assets/lectra_logo.png';
 
 interface HeaderProps {
   userName: string;
@@ -27,72 +28,50 @@ export function Header({ userName, userRole, notificationCount = 0, onProfileCli
   }, []);
 
   return (
-    <header className="bg-[var(--color-bg-surface)] border-b border-[#E2E8F0] px-[var(--space-xl)] py-[var(--space-lg)] shadow-sm animate-[slideInDown_0.5s_ease-out]">
+    <header className="bg-[var(--color-bg-surface)] border-b border-[#E2E8F0] px-[var(--space-xl)] py-[var(--space-md)] shadow-sm z-50 transition-all duration-300">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[var(--font-size-h3)] font-bold text-[var(--color-text-primary)]">
-            Welcome back, {userName}
-          </h2>
-          <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1">
-            {userRole}
+        {/* Logo Section */}
+        <div className="flex flex-col items-start gap-1">
+          <img src={logo} alt="Lectra Logo" className="h-[50px] w-auto animate-[fadeIn_0.5s_ease-out]" />
+          <p 
+            className="text-[13px] text-[var(--color-text-primary)] font-bold uppercase tracking-wider -mt-1 mb-8 opacity-80"
+          >
+            Visiting Lecturer Management
           </p>
         </div>
         
         <div className="flex items-center gap-[var(--space-lg)]">
-          {/* Notifications */}
-          <button
-            className="relative p-2 rounded-lg hover:bg-[var(--color-bg-sidebar)] transition-all duration-300 hover:scale-105 active:scale-95"
-            aria-label={`Notifications${notificationCount > 0 ? `, ${notificationCount} unread` : ''}`}
+          {/* User Card */}
+          <div 
+            className="flex items-center gap-[var(--space-md)] bg-[var(--color-bg-sidebar)]/50 px-[var(--space-md)] py-[var(--space-xs)] rounded-2xl hover:bg-[var(--color-bg-sidebar)] transition-all duration-300 cursor-pointer group"
+            onClick={onProfileClick}
           >
-            <Bell className={`w-6 h-6 text-[var(--color-text-secondary)] transition-colors ${notificationCount > 0 ? 'animate-[float_2s_ease-in-out_infinite]' : ''}`} />
-            {notificationCount > 0 && (
-              <span
-                className="absolute top-1 right-1 w-5 h-5 bg-[var(--color-error)] text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-[pulse_2s_ease-in-out_infinite]"
-                aria-hidden="true"
-              >
-                {notificationCount > 9 ? '9+' : notificationCount}
-              </span>
-            )}
-          </button>
-          
-          {/* User Profile */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-[var(--space-sm)] p-2 rounded-lg hover:bg-[var(--color-bg-sidebar)] transition-all duration-300 hover:scale-105 active:scale-95"
-              aria-label="User profile"
-              aria-expanded={isDropdownOpen}
-            >
-              <UserCircle className="w-8 h-8 text-[var(--color-text-secondary)] transition-colors duration-300 hover:text-[var(--color-primary)]" />
-              <ChevronDown className={`w-4 h-4 text-[var(--color-text-secondary)] transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-[var(--color-bg-surface)] border border-[#E2E8F0] rounded-xl shadow-2xl z-50 overflow-hidden animate-[slideInDown_0.2s_ease-out]">
-                <button
-                  className="w-full flex items-center gap-[var(--space-md)] px-[var(--space-lg)] py-[var(--space-md)] text-[var(--font-size-small)] text-[var(--color-text-primary)] hover:bg-gradient-to-r hover:from-[var(--color-primary)]/5 hover:to-[var(--color-primary)]/10 transition-all duration-200 group"
-                  onClick={() => {
-                    setIsDropdownOpen(false);
-                    onProfileClick?.();
-                  }}
-                >
-                  <User className="w-4 h-4 text-[var(--color-primary)] group-hover:scale-110 transition-transform duration-200" />
-                  <span className="font-medium">My Profile</span>
-                </button>
-                <div className="border-t border-[#E2E8F0]"></div>
-                <button
-                  className="w-full flex items-center gap-[var(--space-md)] px-[var(--space-lg)] py-[var(--space-md)] text-[var(--font-size-small)] text-[var(--color-error)] hover:bg-[#FEE2E2] transition-all duration-200 group"
-                  onClick={() => {
-                    setIsDropdownOpen(false);
-                    onLogout?.();
-                  }}
-                >
-                  <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
-                  <span className="font-medium">Logout</span>
-                </button>
+            <div className="relative">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
+                <User className="w-6 h-6 text-[var(--color-primary)]" />
               </div>
-            )}
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[var(--color-success)] border-2 border-white rounded-full shadow-sm"></div>
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)] leading-none">
+                {userName}
+              </p>
+              <p className="text-[11px] text-[var(--color-text-disabled)] mt-1 font-medium">
+                {userRole}
+              </p>
+            </div>
           </div>
+
+          <div className="w-px h-8 bg-[#E2E8F0]"></div>
+          
+          {/* Logout Icon */}
+          <button
+            onClick={onLogout}
+            className="p-3 bg-red-50 text-[var(--color-error)] rounded-xl hover:bg-red-500 hover:text-white transition-all duration-300 group shadow-sm active:scale-95"
+            aria-label="Logout"
+          >
+            <LogOut className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" />
+          </button>
         </div>
       </div>
     </header>

@@ -233,9 +233,13 @@ app.get('/users', authenticateToken, async (req, res) => {
           WHEN r.rolename = 'SubCoordinator' THEN
             (SELECT string_agg(m.modulecode, ', ') FROM module m WHERE m.subcoordinatorid = u.userid)
           WHEN r.rolename = 'Lecturer' THEN
-            (SELECT string_agg(m.moduleid::text, ', ') FROM module m JOIN modulelecturer ml ON m.moduleid = ml.moduleid WHERE ml.lecturerid = u.userid)
+            (SELECT string_agg(mc.modulecode, ', ') 
+             FROM module m 
+             JOIN module_catalog mc ON m.modulecode = mc.modulecode
+             JOIN modulelecturer ml ON m.moduleid = ml.moduleid 
+             WHERE ml.lecturerid = u.userid)
           ELSE NULL
-        END as assignedmoduleids
+        END as assignedmodules
       FROM users u 
       JOIN roles r ON u.roleid = r.roleid 
       ORDER BY u.userid DESC
@@ -258,7 +262,7 @@ app.get('/users', authenticateToken, async (req, res) => {
         name: user.name,
         email: user.email,
         role: frontendRole,
-        assignedmoduleids: user.assignedmoduleids ? user.assignedmoduleids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) : []
+        assignedModules: user.assignedmodules || ''
       };
     });
 
@@ -1441,7 +1445,7 @@ app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
       }
       if (lecturer.phonenumber) {
         try {
-            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\nDear ${lecturer.name},\n\n${messageText}\n\n_Lectra Session Management System_`;
+            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\nDear ${lecturer.name},\n\n${messageText}\n\n_Lectra VLMS_`;
             const waSuccess = await whatsappService.sendMessage(lecturer.phonenumber, formattedMessage);
             if (waSuccess) waCount++;
             else errors.push(`WhatsApp to ${lecturer.name} failed (Service error).`);
@@ -1490,8 +1494,39 @@ app.post('/modules/:moduleId/timetable', authenticateToken, upload.single('timet
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    // Fetch module and term info for human-readable filename
+    const moduleInfoRes = await db.query(`
+      SELECT m.modulecode, t.academicyear, t.semester 
+      FROM module m 
+      JOIN academic_terms t ON m.termid = t.termid 
+      WHERE m.moduleid = $1
+    `, [parseInt(moduleId)]);
+
+    let finalFilename = req.file.filename;
+
+    if (moduleInfoRes.rows.length > 0) {
+      const { modulecode, academicyear, semester } = moduleInfoRes.rows[0];
+      const ext = path.extname(req.file.originalname);
+      const timestamp = Date.now();
+      
+      // Sanitize fields for filename
+      const safeCode = modulecode.replace(/[^a-z0-9]/gi, '_');
+      const safeYear = academicyear.replace(/[^a-z0-9]/gi, '-');
+      
+      // Format: Timetable_CO2201_2023-2024_S1_1712910000000.xlsx
+      const newFilename = `Timetable_${safeCode}_${safeYear}_S${semester}_${timestamp}${ext}`;
+      const newPath = path.join(path.dirname(req.file.path), newFilename);
+      
+      try {
+        fs.renameSync(req.file.path, newPath);
+        finalFilename = newFilename;
+      } catch (renameErr) {
+        console.error('Error renaming file, using original:', renameErr);
+      }
+    }
+
     // Relative path to store in DB
-    const relativePath = `uploads/${req.file.filename}`;
+    const relativePath = `uploads/${finalFilename}`;
 
     // Update the database
     const updateRes = await db.query(
@@ -1500,7 +1535,8 @@ app.post('/modules/:moduleId/timetable', authenticateToken, upload.single('timet
     );
 
     if (updateRes.rows.length === 0) {
-      fs.unlinkSync(req.file.path); // remove the file if module not found
+      const pathToRemove = path.join(uploadDir, finalFilename);
+      if (fs.existsSync(pathToRemove)) fs.unlinkSync(pathToRemove);
       return res.status(404).json({ error: 'Module not found' });
     }
 
@@ -1512,8 +1548,48 @@ app.post('/modules/:moduleId/timetable', authenticateToken, upload.single('timet
     });
   } catch (err) {
     console.error('Error uploading timetable:', err);
-    if (req.file) fs.unlinkSync(req.file.path); // clean up file on error
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
     res.status(500).json({ error: 'Server error uploading timetable' });
+  }
+});
+
+// DELETE /modules/:id/timetable — delete uploaded timetable
+app.delete('/modules/:id/timetable', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const moduleId = parseInt(id);
+
+    if (isNaN(moduleId)) {
+      return res.status(400).json({ error: 'Invalid module ID' });
+    }
+
+    // Get current path to delete file
+    const modRes = await db.query('SELECT studenttimetablepath FROM module WHERE moduleid = $1', [moduleId]);
+    if (modRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const currentPath = modRes.rows[0].studenttimetablepath;
+    if (currentPath) {
+      const fullPath = path.join(__dirname, currentPath);
+      if (fs.existsSync(fullPath)) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch (err) {
+          console.error('Error deleting physical file:', err);
+        }
+      }
+    }
+
+    // Update database
+    await db.query('UPDATE module SET studenttimetablepath = NULL WHERE moduleid = $1', [moduleId]);
+    
+    await auditLog.record(req.user.id, 'DELETE_TIMETABLE', 'MODULE', moduleId, { oldPath: currentPath }, req);
+    
+    res.json({ message: 'Timetable deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting timetable:', err);
+    res.status(500).json({ error: 'Server error deleting timetable' });
   }
 });
 
@@ -1720,6 +1796,12 @@ app.get('/reports/data', authenticateToken, async (req, res) => {
       case 'weekly-schedule':
         data = await reportService.getWeeklyScheduleReport(filters);
         break;
+      case 'visiting-lecturers':
+        data = await reportService.getVisitingLecturersReport(filters);
+        break;
+      case 'modules':
+        data = await reportService.getModulesReport(filters);
+        break;
       default:
         return res.status(400).json({ error: 'Invalid report type' });
     }
@@ -1759,6 +1841,14 @@ app.get('/reports/export', authenticateToken, async (req, res) => {
       case 'weekly-schedule':
         data = await reportService.getWeeklyScheduleReport(filters);
         title = 'Weekly Schedule Report';
+        break;
+      case 'visiting-lecturers':
+        data = await reportService.getVisitingLecturersReport(filters);
+        title = 'Visiting Lecturers Report';
+        break;
+      case 'modules':
+        data = await reportService.getModulesReport(filters);
+        title = 'Module Assignments Report';
         break;
       default:
         console.warn(`[REPORTS] Invalid report type: ${type}`);

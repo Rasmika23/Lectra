@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logo from '../assets/lectra_logo.png';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
@@ -53,23 +54,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-white/5 rounded-full blur-3xl animate-[float_8s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}></div>
 
       <Card className="w-full max-w-md relative z-10 animate-[scaleIn_0.5s_ease-out] backdrop-blur-sm">
-        <div className="text-center mb-[var(--space-xl)]">
-          <div className="relative inline-block">
-            <h1 className="text-[var(--font-size-h1)] font-bold bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] bg-clip-text text-transparent mb-[var(--space-sm)]">
-              Lectra
-            </h1>
-            <Sparkles className="absolute -top-2 -right-6 w-5 h-5 text-[var(--color-primary)] animate-[spin_3s_linear_infinite]" />
+        <div className="text-center mb-[var(--space-xl)] flex flex-col items-center">
+          <div className="relative inline-block mb-[var(--space-sm)]">
+            <img
+              src={logo}
+              alt="Lectra Logo"
+              className="h-16 w-auto object-contain animate-[fadeIn_0.5s_ease-out] mt-5 mb-5"
+            />
           </div>
-          <p className="text-[var(--color-text-secondary)]">
-            Visiting Lecturers Management System
-          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-[var(--space-lg)]">
           <Input
             label="Email Address"
             type="email"
-            placeholder="Enter your E-mail"
+            placeholder="Enter your e-mail address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -94,10 +93,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               label="Remember me"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
+              labelClassName="text-[13px] text-[var(--color-text-secondary)]"
             />
             <button
               type="button"
-              className="text-[var(--font-size-small)] text-[var(--color-primary)] hover:underline"
+              className="text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline transition-colors"
             >
               Forgot password?
             </button>
@@ -112,6 +112,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           >
             {isLoading ? 'Signing in...' : 'Sign In'}
           </Button>
+
+          <p className="mt-[var(--space-md)] text-center text-[14px] text-[var(--color-text-secondary)]">
+            If you don't have an account,<br></br> please contact the administration.
+          </p>
         </form>
 
         <div className="mt-[var(--space-xl)] pt-[var(--space-lg)] border-t border-[#E2E8F0]">

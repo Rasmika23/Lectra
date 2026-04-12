@@ -62,7 +62,11 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
     { value: 'reschedules', label: 'Rescheduled Sessions Report' },
     { value: 'bank-details', label: 'Lecturer Bank Details' },
     { value: 'weekly-schedule', label: 'Weekly Schedule Report' },
+    { value: 'visiting-lecturers', label: 'Visiting Lecturers Report' },
+    { value: 'modules', label: 'Module Assignments Report' },
   ];
+
+  const isDateDisabled = ['visiting-lecturers', 'modules', 'bank-details', 'weekly-schedule'].includes(reportType);
 
   const moduleOptions = [
     { value: 'all', label: 'All Modules' },
@@ -260,6 +264,7 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
                       fullWidth
+                      disabled={isDateDisabled}
                     />
                     
                     <Input
@@ -268,6 +273,7 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
                       fullWidth
+                      disabled={isDateDisabled}
                     />
                     
                     <Select
