@@ -6,6 +6,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   helperText?: string;
   fullWidth?: boolean;
   icon?: React.ReactNode;
+  variant?: 'default' | 'premium';
 }
 
 export function Input({
@@ -17,18 +18,24 @@ export function Input({
   className = '',
   id,
   required,
+  variant = 'default',
   ...props
 }: InputProps) {
   const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
   const errorId = error ? `${inputId}-error` : undefined;
   const helperId = helperText ? `${inputId}-helper` : undefined;
   
+  const isPremium = variant === 'premium';
+  
   return (
-    <div className={`flex flex-col gap-[var(--space-sm)] ${fullWidth ? 'w-full' : ''}`}>
+    <div className={`flex flex-col ${isPremium ? 'gap-0' : 'gap-[var(--space-sm)]'} ${fullWidth ? 'w-full' : ''}`}>
       {label && (
         <label
           htmlFor={inputId}
-          className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)]"
+          className={isPremium 
+            ? "block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1"
+            : "text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)]"
+          }
         >
           {label}
           {required && <span className="text-[var(--color-error)] ml-1" aria-label="required">*</span>}
@@ -44,14 +51,16 @@ export function Input({
           id={inputId}
           className={`
             ${icon ? 'pl-10' : 'pl-[var(--space-md)]'}
-            pr-[var(--space-md)] py-[var(--space-sm)]
+            ${isPremium ? 'pr-4 py-2' : 'pr-[var(--space-md)] py-[var(--space-sm)]'}
             border rounded-xl
             text-[var(--font-size-body)]
             transition-all duration-300
             w-full
-            ${error 
-              ? 'border-[var(--color-error)] focus:border-[var(--color-error)] focus:ring-2 focus:ring-[var(--color-error)] focus:ring-opacity-20' 
-              : 'border-[#CBD5E1] focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)] focus:ring-opacity-10 hover:border-[var(--color-primary)]/50'
+            ${isPremium
+              ? 'bg-white border-[#E2E8F0] hover:border-blue-400 focus:ring-2 focus:ring-blue-100 font-normal text-slate-700'
+              : (error 
+                ? 'border-[var(--color-error)] focus:border-[var(--color-error)] focus:ring-2 focus:ring-[var(--color-error)] focus:ring-opacity-20' 
+                : 'border-[#CBD5E1] focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)] focus:ring-opacity-10 hover:border-[var(--color-primary)]/50')
             }
             disabled:bg-[var(--color-bg-sidebar)] disabled:cursor-not-allowed
             ${className}

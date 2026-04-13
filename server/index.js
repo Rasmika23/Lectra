@@ -1890,6 +1890,18 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
+// Manual trigger for reminder scheduler scan (useful for testing)
+app.post('/debug/trigger-reminders', async (req, res) => {
+  try {
+    console.log('[DEBUG] Manually triggering reminder scan...');
+    await reminderScheduler.checkAndSendReminders();
+    res.json({ success: true, message: 'Reminder scan triggered successfully' });
+  } catch (err) {
+    console.error('[DEBUG] Error triggering reminders:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Start services
 whatsappService.initialize();
 const reminderScheduler = require('./services/ReminderScheduler');

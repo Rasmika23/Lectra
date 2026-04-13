@@ -7,6 +7,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Calendar, Clock, MapPin, Video, Users, Plus, X, BookOpen, Bell, Check, Trash2, Settings, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { authHeaders, fetchWithAuth } from '../lib/api';
+import { AnalogTimePicker } from '../components/AnalogTimePicker';
 
 const API = 'http://localhost:5000';
 
@@ -38,7 +39,7 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
   // New session state
   const [isAdding, setIsAdding] = useState(false);
   const [newDate, setNewDate] = useState('');
-  const [newTime, setNewTime] = useState('');
+  const [newTime, setNewTime] = useState('09:00');
   const [newMode, setNewMode] = useState('Physical');
   const [newDuration, setNewDuration] = useState('2');
   const [newLocation, setNewLocation] = useState('');
@@ -116,7 +117,7 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
       toast.success('Custom session added successfully');
       setIsAdding(false);
       setNewDate('');
-      setNewTime('');
+      setNewTime('09:00');
       setNewLocation('');
       fetchSessions(selectedModule.moduleid);
     } catch (err: any) {
@@ -240,12 +241,12 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
                   </div>
                   <form onSubmit={handleAddSession} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <Input label="Date" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required />
-                      <Input label="Time" type="time" value={newTime} onChange={e => setNewTime(e.target.value)} required />
+                      <Input label="Date" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required variant="premium" />
+                      <AnalogTimePicker label="Time" value={newTime} onChange={setNewTime} />
                     </div>
-                    <Select label="Mode" options={[{value: 'Physical', label: 'Physical'}, {value: 'Online', label: 'Online'}]} value={newMode} onChange={e => setNewMode(e.target.value)} />
-                    <Input label="Duration (hours)" type="number" step="0.5" min="0.5" value={newDuration} onChange={e => setNewDuration(e.target.value)} required />
-                    <Input label="Location or URL" value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="e.g. A4 202 or Zoom Link" />
+                    <Select label="Mode" options={[{value: 'Physical', label: 'Physical'}, {value: 'Online', label: 'Online'}]} value={newMode} onChange={e => setNewMode(e.target.value)} variant="premium" />
+                    <Input label="Duration (hours)" type="number" step="0.5" min="0.5" value={newDuration} onChange={e => setNewDuration(e.target.value)} required variant="premium" />
+                    <Input label="Location or URL" value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="e.g. A4 202 or Zoom Link" variant="premium" />
                     <div className="flex gap-3 pt-4">
                       <Button type="button" variant="ghost" fullWidth onClick={() => setIsAdding(false)}>Cancel</Button>
                       <Button type="submit" variant="primary" fullWidth>Add Session</Button>
