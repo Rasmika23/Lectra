@@ -155,8 +155,8 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
             
             {/* Upcoming Sessions */}
             <Card>
-              <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
-                Upcoming Lectures
+              <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)] pb-7">
+                Upcoming Sessions
               </h2>
               
               {loading ? (
@@ -174,20 +174,14 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
                     >
                       <div className="flex items-start justify-between mb-[var(--space-md)]">
                         <div>
-                          <div className="flex items-center gap-[var(--space-md)] mb-[var(--space-sm)]">
+                          <div className="mb-[var(--space-sm)]">
                             <h3 className="font-bold text-[var(--color-text-primary)] text-[var(--font-size-h3)]">
-                              {session.modulecode}
+                              [{session.modulecode}] {session.modulename}
                             </h3>
-                            {isUpcoming(session.date) && (
-                              <StatusBadge status="warning">Soon</StatusBadge>
-                            )}
-                            {session.status?.toLowerCase() === 'rescheduled' && (
-                              <StatusBadge status="info">Rescheduled</StatusBadge>
-                            )}
+                            <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1 font-medium opacity-80">
+                              {session.academicyear} - Sem {session.semester}
+                            </p>
                           </div>
-                          <p className="text-[var(--color-text-secondary)]">
-                            {session.modulename}
-                          </p>
                         </div>
                         <Button
                           variant="outline"
@@ -245,7 +239,7 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
                         <div className="flex-1">
                           <div className="flex items-center gap-[var(--space-md)] mb-[var(--space-sm)]">
                             <h3 className="font-bold text-[var(--color-text-primary)]">
-                              {session.modulecode} - {session.modulename}
+                              {session.modulecode} - {session.modulename} ({session.academicyear} - Sem {session.semester})
                             </h3>
                             <StatusBadge status="success">Completed</StatusBadge>
                           </div>

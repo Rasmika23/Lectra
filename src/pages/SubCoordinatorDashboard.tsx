@@ -131,7 +131,7 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
               <Card className="flex flex-col">
                 <div className="flex items-center justify-between mb-[var(--space-lg)]">
                   <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
-                    Upcoming Lectures
+                    Upcoming Sessions
                   </h2>
                   <Button
                     variant="outline"
@@ -152,7 +152,7 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
                         <div className="flex items-start justify-between mb-[var(--space-md)]">
                           <div>
                             <h3 className="font-bold text-[var(--color-text-primary)]">
-                              {session.modulecode} - {session.modulename}
+                              {session.modulecode} - {session.modulename} ({session.academicyear} - Sem {session.semester})
                             </h3>
                             <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)] mt-1">
                               {session.lecturername || 'No lecturer assigned'}
@@ -170,7 +170,7 @@ export function SubCoordinatorDashboard({ currentUser, onNavigate, onLogout }: S
                           </div>
                           <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                             <Clock className="w-4 h-4 text-[var(--color-primary)]" />
-                            <span>{session.time} ({session.duration}h)</span>
+                            <span>{session.time} ({Number(session.duration)}h)</span>
                           </div>
                           <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                             <MapPin className="w-4 h-4 text-[var(--color-primary)]" />

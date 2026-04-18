@@ -938,7 +938,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                       <div className="flex flex-wrap gap-3">
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-600 rounded-full border border-slate-100">
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="text-xs font-bold">{slot.duration} Hour Session</span>
+                          <span className="text-xs font-bold">{Number(slot.duration)} Hour Session</span>
                         </div>
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/30 text-blue-700 rounded-full border border-blue-100/50">
                           <MapPin className="w-3.5 h-3.5 text-blue-400" />

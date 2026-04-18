@@ -107,10 +107,9 @@ class ReminderScheduler {
     try {
         // Find assigned lecturers for this module who want reminders
         const lecturersRes = await db.query(`
-            SELECT ml.lecturerid, ml.wants_reminders, u.email, lp.phonenumber as phonenumber_profile, u.name
+            SELECT ml.lecturerid, ml.wants_reminders, u.email, u.phonenumber, u.name
             FROM modulelecturer ml
             JOIN users u ON ml.lecturerid = u.userid
-            LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
             WHERE ml.moduleid = $1 AND ml.wants_reminders = true
         `, [session.moduleid]);
 
@@ -140,7 +139,7 @@ class ReminderScheduler {
             }
 
             // Send WhatsApp
-            const phone = lecturer.phonenumber_profile;
+            const phone = lecturer.phonenumber;
             if (phone) {
                 await whatsappService.sendMessage(phone, messageText);
             }
@@ -150,6 +149,26 @@ class ReminderScheduler {
                 'INSERT INTO reminder (sessionid, recipientid, content, senttime) VALUES ($1, $2, $3, NOW())',
                 [session.sessionid, lecturer.lecturerid, messageText]
             );
+        }
+
+        // --- Notify Sub-Coordinator ---
+        const moduleRes = await db.query('SELECT subcoordinatorid FROM module WHERE moduleid = $1', [session.moduleid]);
+        if (moduleRes.rows.length > 0 && moduleRes.rows[0].subcoordinatorid) {
+            const subId = moduleRes.rows[0].subcoordinatorid;
+            const subRes = await db.query('SELECT name, email, phonenumber FROM users WHERE userid = $1', [subId]);
+            
+            if (subRes.rows.length > 0) {
+                const sub = subRes.rows[0];
+                const lecturerNames = lecturersRes.rows.map(l => l.name).join(', ');
+                const subMessage = `Notification: Automated reminder sent to lecturer(s) (${lecturerNames}) for module ${moduleCode} - ${moduleName} session scheduled at ${sessionDateStr}.`;
+                
+                if (sub.email) {
+                    await sendReminderEmail(sub.email, 'Lecturer Reminder Notification', subMessage);
+                }
+                if (sub.phonenumber) {
+                    await whatsappService.sendMessage(sub.phonenumber, subMessage);
+                }
+            }
         }
 
         // Mark session as reminder sent

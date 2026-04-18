@@ -165,6 +165,11 @@ export default function App() {
     localStorage.removeItem('currentPage');
   };
 
+  const handleUserUpdate = (updatedUser: any) => {
+    setCurrentUser(updatedUser);
+    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+  };
+
   // Render appropriate page
   const renderPage = () => {
     if (!currentUser && currentPage !== 'login' && currentPage !== 'setup-account') {
@@ -220,10 +225,10 @@ export default function App() {
         return <MyLecturesPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'lecturer-profile':
-        return <LecturerProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+        return <LecturerProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />;
 
       case 'user-profile':
-        return <UserProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
+        return <UserProfilePage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />;
 
       case 'reports':
         return <ReportsPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
@@ -231,14 +236,8 @@ export default function App() {
       case 'audit-log':
         return <AuditLogPage />;
 
-      case 'login':
-        return <LoginPage onLogin={handleLogin} />;
-
       case 'setup-account':
         return <SetupAccountPage onNavigate={handleNavigate} onLogin={handleLogin} />;
-
-      case 'main-dashboard':
-        return <MainCoordinatorDashboard currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       default:
         return <LoginPage onLogin={handleLogin} />;

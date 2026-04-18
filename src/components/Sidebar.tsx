@@ -47,7 +47,7 @@ export function Sidebar({ role, currentPage, onNavigate, onLogout }: SidebarProp
       case 'lecturer':
         return [
           { label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: 'lecturer-portal' },
-          { label: 'My Lectures', icon: <BookOpen className="w-5 h-5" />, href: 'my-lectures' },
+          { label: 'My Sessions', icon: <BookOpen className="w-5 h-5" />, href: 'my-lectures' },
           { label: 'My Profile', icon: <UserCircle className="w-5 h-5" />, href: 'lecturer-profile' },
         ];
       case 'staff':

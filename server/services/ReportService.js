@@ -9,8 +9,8 @@ class ReportService {
     const { moduleId, lecturerId } = filters;
     let query = `
       SELECT 
-        u.name, u.email,
-        lp.phonenumber, lp.nicnumber,
+        u.name, u.email, u.phonenumber,
+        lp.nicnumber,
         b.bankname, bd.accountnumber, bd.branch, 
         bd.accountholdername, b.country as bankcountry, b.swiftbic, bd.iban
       FROM users u
@@ -41,7 +41,7 @@ class ReportService {
     let query = `
       SELECT 
         TO_CHAR(s.datetime, 'DD/MM/YYYY HH:mi') as date, 
-        s.duration,
+        s.duration::float,
         m.modulecode, mc.modulename,
         t.academicyear, t.semester,
         u.name as lecturername,
@@ -93,7 +93,7 @@ class ReportService {
         TO_CHAR(s.datetime, 'DD/MM/YYYY HH:mi') as date,
         m.modulecode, mc.modulename,
         t.academicyear, t.semester,
-        sd.topicscovered, sd.actual_duration,
+        sd.topicscovered, sd.actual_duration::float,
         u.name as recordedby
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
@@ -136,7 +136,7 @@ class ReportService {
       SELECT 
         TO_CHAR(s.previous_datetime, 'DD/MM/YYYY HH:mi') as original_date,
         TO_CHAR(s.datetime, 'DD/MM/YYYY HH:mi') as new_date,
-        s.duration,
+        s.duration::float,
         m.modulecode, mc.modulename,
         t.academicyear, t.semester,
         u.name as lecturername
@@ -178,7 +178,7 @@ class ReportService {
     const { moduleId } = filters;
     let query = `
       SELECT 
-        ms.day, ms.starttime, ms.duration, ms.location,
+        ms.day, ms.starttime, ms.duration::float, ms.location,
         m.modulecode, mc.modulename,
         t.academicyear, t.semester
       FROM moduleschedule ms
@@ -196,8 +196,8 @@ class ReportService {
     const { moduleId, lecturerId } = filters;
     let query = `
       SELECT 
-        u.name, u.email,
-        lp.phonenumber, lp.nicnumber,
+        u.name, u.email, u.phonenumber,
+        lp.nicnumber,
         (SELECT STRING_AGG(mc.modulecode, ', ') 
          FROM modulelecturer ml 
          JOIN module m ON ml.moduleid = m.moduleid 
@@ -280,16 +280,76 @@ class ReportService {
     if (data.length > 0) {
       sheet.addRow([]);
       if (type === 'attendance') {
+        const uniqueLecturers = [...new Set(data.map(row => row.lecturername))];
+        if (uniqueLecturers.length > 1) {
+          sheet.addRow(['BREAKDOWN BY LECTURER:']);
+          sheet.lastRow.font = { bold: true };
+          uniqueLecturers.forEach(lecturer => {
+            const lecturerData = data.filter(row => row.lecturername === lecturer);
+            const duration = lecturerData.reduce((sum, row) => sum + Number(row.duration || 0), 0);
+            const p = lecturerData.filter(row => row.status === 'Present').length;
+            const a = lecturerData.filter(row => row.status === 'Absent').length;
+            const nm = lecturerData.filter(row => row.status === 'Not Marked').length;
+            sheet.addRow({ date: lecturer, duration: duration, lecturername: `P: ${p}, A: ${a}, NM: ${nm}` });
+          });
+          sheet.addRow([]);
+        }
         const totalDuration = data.reduce((sum, row) => sum + Number(row.duration || 0), 0);
         const presentCount = data.filter(row => row.status === 'Present').length;
         const absentCount = data.filter(row => row.status === 'Absent').length;
         const notMarkedCount = data.filter(row => row.status === 'Not Marked').length;
-        sheet.addRow({ date: 'SUMMARY:', duration: totalDuration, lecturername: `P: ${presentCount}, A: ${absentCount}, NM: ${notMarkedCount}` });
+        sheet.addRow({ date: 'TOTAL SUMMARY:', duration: totalDuration, lecturername: `P: ${presentCount}, A: ${absentCount}, NM: ${notMarkedCount}` });
+
       } else if (type === 'topics') {
+        const uniqueRecorders = [...new Set(data.map(row => row.recordedby))];
+        if (uniqueRecorders.length > 1) {
+          sheet.addRow(['BREAKDOWN BY LECTURER:']);
+          sheet.lastRow.font = { bold: true };
+          uniqueRecorders.forEach(recorder => {
+            const recorderData = data.filter(row => row.recordedby === recorder);
+            const duration = recorderData.reduce((sum, row) => sum + Number(row.actual_duration || 0), 0);
+            sheet.addRow({ date: recorder, actual_duration: `Sessions: ${recorderData.length}, Total: ${duration}h` });
+          });
+          sheet.addRow([]);
+        }
         const totalDuration = data.reduce((sum, row) => sum + Number(row.actual_duration || 0), 0);
-        sheet.addRow({ date: 'SUMMARY:', actual_duration: `Total Duration: ${totalDuration}` });
+        sheet.addRow({ date: 'TOTAL SUMMARY:', actual_duration: `Total Sessions: ${data.length}, Total Duration: ${totalDuration}h` });
+
       } else if (type === 'reschedules') {
-        sheet.addRow({ original_date: 'SUMMARY:', lecturername: `Total Rescheduled: ${data.length}` });
+        const uniqueLecturers = [...new Set(data.filter(row => row.lecturername).map(row => row.lecturername))];
+        if (uniqueLecturers.length > 1) {
+          sheet.addRow(['BREAKDOWN BY LECTURER:']);
+          sheet.lastRow.font = { bold: true };
+          uniqueLecturers.forEach(lecturer => {
+            const count = data.filter(row => row.lecturername === lecturer).length;
+            sheet.addRow({ original_date: lecturer, lecturername: `Rescheduled: ${count}` });
+          });
+          sheet.addRow([]);
+        }
+        sheet.addRow({ original_date: 'TOTAL SUMMARY:', lecturername: `Total Rescheduled: ${data.length}` });
+
+      } else if (type === 'weekly-schedule') {
+        const uniqueModules = [...new Set(data.map(row => row.modulecode))];
+        sheet.addRow({ day: 'TOTAL SUMMARY:', modulecode: `Total Modules: ${uniqueModules.length}, Total Sessions: ${data.length}` });
+
+      } else if (type === 'visiting-lecturers') {
+        sheet.addRow({ name: 'TOTAL SUMMARY:', email: `Total Lecturers: ${data.length}` });
+
+      } else if (type === 'modules') {
+        const uniqueCoordinators = [...new Set(data.filter(row => row.subcoordinator).map(row => row.subcoordinator))];
+        if (uniqueCoordinators.length > 1) {
+          sheet.addRow(['BREAKDOWN BY SUB-COORDINATOR:']);
+          sheet.lastRow.font = { bold: true };
+          uniqueCoordinators.forEach(sc => {
+            const count = data.filter(row => row.subcoordinator === sc).length;
+            sheet.addRow({ modulecode: sc, subcoordinator: `Assigned Modules: ${count}` });
+          });
+          sheet.addRow([]);
+        }
+        sheet.addRow({ modulecode: 'TOTAL SUMMARY:', subcoordinator: `Total Modules: ${data.length}` });
+
+      } else if (type === 'bank-details') {
+        sheet.addRow({ name: 'TOTAL SUMMARY:', email: `Total Lecturers: ${data.length}` });
       }
       sheet.lastRow.font = { bold: true };
     }
@@ -352,26 +412,171 @@ class ReportService {
           </table>
           <div class="summary">
             <h3>Report Summary</h3>
-            ${type === 'attendance' ? `
-              <p><strong>Total Session Records:</strong> ${data.length}</p>
-              <p><strong>Total Present:</strong> ${data.filter(row => row.status === 'Present').length}</p>
-              <p><strong>Total Absent:</strong> ${data.filter(row => row.status === 'Absent').length}</p>
-              <p><strong>Total Not Marked:</strong> ${data.filter(row => row.status === 'Not Marked').length}</p>
-              <p><strong>Total Scheduled Duration:</strong> ${data.reduce((sum, row) => sum + Number(row.duration || 0), 0)} hours</p>
-            ` : ''}
-            ${type === 'topics' ? `
-              <p><strong>Total Sessions:</strong> ${data.length}</p>
-              <p><strong>Total Actual Duration:</strong> ${data.reduce((sum, row) => sum + Number(row.actual_duration || 0), 0)} hours</p>
-            ` : ''}
-            ${type === 'reschedules' ? `
-              <p><strong>Total Rescheduled Sessions:</strong> ${data.length}</p>
-            ` : ''}
-            ${type === 'visiting-lecturers' ? `
-              <p><strong>Total Lecturers:</strong> ${data.length}</p>
-            ` : ''}
-            ${type === 'modules' ? `
-              <p><strong>Total Modules:</strong> ${data.length}</p>
-            ` : ''}
+            ${(() => {
+              if (type === 'attendance') {
+                const uniqueLecturers = [...new Set(data.map(row => row.lecturername))];
+                const totalDuration = data.reduce((sum, row) => sum + Number(row.duration || 0), 0);
+                const p = data.filter(row => row.status === 'Present').length;
+                const a = data.filter(row => row.status === 'Absent').length;
+                
+                let html = `
+                  <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; flex: 1; min-width: 120px;">
+                      <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Sessions</span>
+                      <div style="font-size: 18px; font-weight: bold; color: #0f172a;">${data.length}</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; flex: 1; min-width: 120px;">
+                      <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Duration</span>
+                      <div style="font-size: 18px; font-weight: bold; color: #0f172a;">${totalDuration}h</div>
+                    </div>
+                    <div style="background: #ecfdf5; padding: 12px; border-radius: 6px; border: 1px solid #d1fae5; flex: 1; min-width: 120px;">
+                      <span style="font-size: 9px; color: #059669; text-transform: uppercase;">Present</span>
+                      <div style="font-size: 18px; font-weight: bold; color: #059669;">${p}</div>
+                    </div>
+                    <div style="background: #fef2f2; padding: 12px; border-radius: 6px; border: 1px solid #fee2e2; flex: 1; min-width: 120px;">
+                      <span style="font-size: 9px; color: #dc2626; text-transform: uppercase;">Absent</span>
+                      <div style="font-size: 18px; font-weight: bold; color: #dc2626;">${a}</div>
+                    </div>
+                  </div>
+                `;
+                
+                if (uniqueLecturers.length > 1) {
+                  html += `
+                    <h4 style="margin: 15px 0 8px 0; color: #334155; font-size: 14px;">Breakdown by Lecturer</h4>
+                    <table style="margin: 0; box-shadow: none; border: 1px solid #f1f5f9;">
+                      <thead>
+                        <tr><th style="text-align: left;">Lecturer</th><th>Sessions</th><th>Duration</th><th>P</th><th>A</th><th>NM</th></tr>
+                      </thead>
+                      <tbody>
+                        ${uniqueLecturers.map(l => {
+                          const ld = data.filter(r => r.lecturername === l);
+                          return `<tr>
+                            <td style="text-align: left; font-weight: 500;">${l}</td>
+                            <td>${ld.length}</td>
+                            <td>${ld.reduce((s, r) => s + Number(r.duration || 0), 0)}</td>
+                            <td style="color: #059669;">${ld.filter(r => r.status === 'Present').length}</td>
+                            <td style="color: #dc2626;">${ld.filter(r => r.status === 'Absent').length}</td>
+                            <td>${ld.filter(r => r.status === 'Not Marked').length}</td>
+                          </tr>`;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  `;
+                }
+                return html;
+              }
+
+              if (type === 'topics') {
+                const uniqueRecorders = [...new Set(data.map(row => row.recordedby))];
+                const totalDuration = data.reduce((sum, row) => sum + Number(row.actual_duration || 0), 0);
+                let html = `
+                  <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; flex: 1;">
+                      <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Sessions</span>
+                      <div style="font-size: 18px; font-weight: bold;">${data.length}</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; flex: 1;">
+                      <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Actual Duration</span>
+                      <div style="font-size: 18px; font-weight: bold;">${totalDuration}h</div>
+                    </div>
+                  </div>
+                `;
+                if (uniqueRecorders.length > 1) {
+                  html += `
+                    <h4 style="margin: 15px 0 8px 0; font-size: 14px;">Breakdown by Lecturer</h4>
+                    <table style="margin: 0; box-shadow: none; border: 1px solid #f1f5f9;">
+                      <thead><tr><th style="text-align: left;">Lecturer</th><th>Sessions</th><th>Total Duration</th></tr></thead>
+                      <tbody>
+                        ${uniqueRecorders.map(l => {
+                          const ld = data.filter(r => r.recordedby === l);
+                          return `<tr><td style="text-align: left;">${l}</td><td>${ld.length}</td><td>${ld.reduce((s, r) => s + Number(r.actual_duration || 0), 0)}h</td></tr>`;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  `;
+                }
+                return html;
+              }
+
+              if (type === 'reschedules') {
+                const uniqueLecturers = [...new Set(data.filter(r => r.lecturername).map(r => r.lecturername))];
+                let html = `
+                  <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: inline-block; min-width: 150px; margin-bottom: 20px;">
+                    <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Reschedules</span>
+                    <div style="font-size: 18px; font-weight: bold;">${data.length}</div>
+                  </div>
+                `;
+                if (uniqueLecturers.length > 1) {
+                  html += `
+                    <h4 style="margin: 15px 0 8px 0; font-size: 14px;">Breakdown by Lecturer</h4>
+                    <table style="margin: 0; box-shadow: none; border: 1px solid #f1f5f9;">
+                      <thead><tr><th style="text-align: left;">Lecturer</th><th>Count</th></tr></thead>
+                      <tbody>
+                        ${uniqueLecturers.map(l => `<tr><td style="text-align: left;">${l}</td><td>${data.filter(r => r.lecturername === l).length}</td></tr>`).join('')}
+                      </tbody>
+                    </table>
+                  `;
+                }
+                return html;
+              }
+
+              if (type === 'weekly-schedule') {
+                const uniqueModules = [...new Set(data.map(r => r.modulecode))];
+                return `
+                  <div style="display: flex; gap: 15px;">
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; flex: 1;">
+                      <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Modules</span>
+                      <div style="font-size: 18px; font-weight: bold;">${uniqueModules.length}</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; flex: 1;">
+                      <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Weekly Sessions</span>
+                      <div style="font-size: 18px; font-weight: bold;">${data.length}</div>
+                    </div>
+                  </div>
+                `;
+              }
+
+              if (type === 'visiting-lecturers') {
+                return `
+                  <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: inline-block; min-width: 150px;">
+                    <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Visiting Lecturers</span>
+                    <div style="font-size: 18px; font-weight: bold;">${data.length}</div>
+                  </div>
+                `;
+              }
+
+              if (type === 'modules') {
+                const uniqueCoordinators = [...new Set(data.filter(r => r.subcoordinator).map(r => r.subcoordinator))];
+                let html = `
+                  <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: inline-block; min-width: 150px; margin-bottom: 20px;">
+                    <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Modules</span>
+                    <div style="font-size: 18px; font-weight: bold;">${data.length}</div>
+                  </div>
+                `;
+                if (uniqueCoordinators.length > 1) {
+                  html += `
+                    <h4 style="margin: 15px 0 8px 0; font-size: 14px;">Breakdown by Sub-coordinator</h4>
+                    <table style="margin: 0; box-shadow: none; border: 1px solid #f1f5f9;">
+                      <thead><tr><th style="text-align: left;">Sub-coordinator</th><th>Modules Assigned</th></tr></thead>
+                      <tbody>
+                        ${uniqueCoordinators.map(sc => `<tr><td style="text-align: left;">${sc}</td><td>${data.filter(r => r.subcoordinator === sc).length}</td></tr>`).join('')}
+                      </tbody>
+                    </table>
+                  `;
+                }
+                return html;
+              }
+
+              if (type === 'bank-details') {
+                return `
+                  <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: inline-block; min-width: 150px;">
+                    <span style="font-size: 9px; color: #64748b; text-transform: uppercase;">Total Records</span>
+                    <div style="font-size: 18px; font-weight: bold;">${data.length}</div>
+                  </div>
+                `;
+              }
+              return '';
+            })()}
           </div>
           `}
         </body>

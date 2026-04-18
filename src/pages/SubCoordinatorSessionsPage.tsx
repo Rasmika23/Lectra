@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { StatusBadge } from '../components/StatusBadge';
@@ -15,6 +16,8 @@ interface Module {
   moduleid: number;
   modulecode: string;
   modulename: string;
+  academicyear: string;
+  semester: number | string;
 }
 
 interface Session {
@@ -43,6 +46,10 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
   const [newMode, setNewMode] = useState('Physical');
   const [newDuration, setNewDuration] = useState('2');
   const [newLocation, setNewLocation] = useState('');
+
+  const [editingLocationSession, setEditingLocationSession] = useState<Session | null>(null);
+  const [tempLocation, setTempLocation] = useState('');
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
 
   useEffect(() => {
     fetchModules();
@@ -157,6 +164,26 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
     }
   };
 
+  const handleUpdateLocation = async () => {
+    if (!editingLocationSession) return;
+    setIsUpdatingLocation(true);
+    try {
+      const res = await fetchWithAuth(`${API}/sessions/${editingLocationSession.sessionid}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: tempLocation })
+      });
+      if (!res.ok) throw new Error('Failed to update location');
+      toast.success('Location updated');
+      setEditingLocationSession(null);
+      if (selectedModule) fetchSessions(selectedModule.moduleid);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsUpdatingLocation(false);
+    }
+  };
+
   const upcomingSessions = sessions.filter(s => 
     s.status?.toLowerCase() === 'scheduled' || 
     s.status?.toLowerCase() === 'upcoming' ||
@@ -225,7 +252,9 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
                 >
                   <option value="">Select an assigned module...</option>
                   {modules.map(m => (
-                    <option key={m.moduleid} value={String(m.moduleid)}>{m.modulecode} - {m.modulename}</option>
+                    <option key={m.moduleid} value={String(m.moduleid)}>
+                      [{m.modulecode}] {m.modulename} ({m.academicyear} - Sem {m.semester})
+                    </option>
                   ))}
                 </select>
               )}
@@ -261,7 +290,7 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
               <Card>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-[var(--space-md)] mb-[var(--space-lg)]">
                   <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
-                    {selectedModule.modulecode} — {selectedModule.modulename}
+                    {selectedModule.modulecode} — {selectedModule.modulename} ({selectedModule.academicyear} - Sem {selectedModule.semester})
                   </h2>
                   <Button variant="primary" icon={<Plus className="w-4 h-4"/>} onClick={() => setIsAdding(true)}>Add Custom Session</Button>
                 </div>
@@ -348,11 +377,17 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-[var(--space-md)] text-[var(--font-size-small)]">
                           <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                             <Clock className="w-4 h-4 flex-shrink-0" />
-                            <span>{formatTime(session.datetime)} ({session.duration}h)</span>
+                            <span>{formatTime(session.datetime)} ({Number(session.duration)}h)</span>
                           </div>
                           <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                             {session.mode === 'Physical' ? <MapPin className="w-4 h-4 flex-shrink-0 text-[var(--color-primary)]" /> : <Video className="w-4 h-4 flex-shrink-0 text-purple-500" />}
-                            <span>{session.locationorurl || 'TBD'}</span>
+                            <span className="flex-1 truncate">{session.locationorurl || 'TBD'}</span>
+                            <button 
+                                onClick={() => { setEditingLocationSession(session); setTempLocation(session.locationorurl || ''); }}
+                                className="text-[10px] text-[var(--color-primary)] hover:underline ml-2"
+                            >
+                                Edit
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -372,9 +407,17 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
                                 <div className="flex items-center gap-[var(--space-lg)] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
                                     <span>{formatTime(session.datetime)}</span>
                                     <span>•</span>
-                                    <span>{session.duration}h</span>
+                                    <span>{Number(session.duration)}h</span>
                                     <span>•</span>
-                                    <span>{session.locationorurl || 'TBD'}</span>
+                                    <span className="flex items-center gap-1 group/loc">
+                                        {session.locationorurl || 'TBD'}
+                                        <button 
+                                            onClick={() => { setEditingLocationSession(session); setTempLocation(session.locationorurl || ''); }}
+                                            className="text-[10px] text-[var(--color-primary)] hover:underline ml-1 opacity-0 group-hover/loc:opacity-100 transition-opacity"
+                                        >
+                                            Edit
+                                        </button>
+                                    </span>
                                 </div>
                             </div>
                             {isPastSession(session.datetime) ? (
@@ -418,6 +461,31 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
           </div>
         </main>
       </div>
+
+      {/* Edit Location Modal */}
+      <Modal
+        isOpen={!!editingLocationSession}
+        onClose={() => setEditingLocationSession(null)}
+        title="Update Session Location"
+        footer={
+            <>
+                <Button variant="ghost" onClick={() => setEditingLocationSession(null)}>Cancel</Button>
+                <Button variant="primary" onClick={handleUpdateLocation} loading={isUpdatingLocation}>Update</Button>
+            </>
+        }
+      >
+        <div className="space-y-4">
+            <p className="text-sm text-slate-500">Update the location or meeting link for this session.</p>
+            <Input 
+                label="Location or URL" 
+                value={tempLocation} 
+                onChange={e => setTempLocation(e.target.value)} 
+                placeholder="e.g. Room A4 202 or Zoom Link"
+                variant="premium"
+                fullWidth
+            />
+        </div>
+      </Modal>
     </div>
   );
 }

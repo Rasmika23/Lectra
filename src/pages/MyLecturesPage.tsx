@@ -3,8 +3,11 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
-import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, ArrowLeft, BookOpen } from 'lucide-react';
+import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, ArrowLeft, BookOpen, Plus, X } from 'lucide-react';
 import { authHeaders, fetchWithAuth } from '../lib/api';
+import { Input } from '../components/Input';
+import { Select } from '../components/Select';
+import { AnalogTimePicker } from '../components/AnalogTimePicker';
 import { toast } from 'sonner';
 
 const API = 'http://localhost:5000';
@@ -59,6 +62,18 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [availableSlotsGrid, setAvailableSlotsGrid] = useState<any[]>([]);
     const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+
+    // New session state
+    const [isAdding, setIsAdding] = useState(false);
+    const [newDate, setNewDate] = useState('');
+    const [newTime, setNewTime] = useState('09:00');
+    const [newMode, setNewMode] = useState('Physical');
+    const [newDuration, setNewDuration] = useState('2');
+    const [newLocation, setNewLocation] = useState('');
+
+    const [editingLocationSession, setEditingLocationSession] = useState<Session | null>(null);
+    const [tempLocation, setTempLocation] = useState('');
+    const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
 
     const lecturerId = currentUser.userid ?? currentUser.id;
 
@@ -116,6 +131,64 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
             setAvailableSlotsGrid([]);
         }
     }, [duration, selectedWeek, reschedulingSession]);
+
+    const handleAddSession = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedModule || !newDate || !newTime || !newDuration) {
+            toast.error('Please fill all required fields');
+            return;
+        }
+
+        try {
+            // Combine date and time
+            const datetime = new Date(`${newDate}T${newTime}`);
+            
+            const res = await fetchWithAuth(`${API}/modules/${selectedModule.moduleid}/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    datetime: datetime.toISOString(),
+                    mode: newMode,
+                    duration: parseFloat(newDuration),
+                    locationorurl: newLocation
+                })
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to add session');
+            }
+
+            toast.success('Custom session added successfully');
+            setIsAdding(false);
+            setNewDate('');
+            setNewTime('09:00');
+            setNewLocation('');
+            fetchSessions();
+        } catch (err: any) {
+            toast.error(err.message);
+        }
+    };
+
+    const handleUpdateLocation = async () => {
+        if (!editingLocationSession) return;
+        setIsUpdatingLocation(true);
+        try {
+            const res = await fetchWithAuth(`${API}/sessions/${editingLocationSession.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ location: tempLocation })
+            });
+            if (!res.ok) throw new Error('Failed to update location');
+            toast.success('Location updated');
+            setEditingLocationSession(null);
+            fetchSessions();
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setIsUpdatingLocation(false);
+        }
+    };
 
     const upcomingSessions = sessions.filter(s => 
         s.status?.toLowerCase() === 'scheduled' || 
@@ -257,7 +330,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                             <>
                                 {/* Header */}
                                 <div>
-                                    <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">My Lectures</h1>
+                                    <h1 className="text-[var(--font-size-h1)] font-bold text-[var(--color-text-primary)]">My Sessions</h1>
                                     <p className="text-[var(--color-text-secondary)] mt-[var(--space-sm)]">
                                         Select a module to view and manage your sessions
                                     </p>
@@ -286,7 +359,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                             <option value="">Select a module</option>
                                             {modules.map(m => (
                                                 <option key={m.moduleid} value={String(m.moduleid)}>
-                                                    {m.modulecode} - {m.modulename}
+                                                    [{m.modulecode}] {m.modulename} ({m.academicyear} - Sem {m.semester})
                                                 </option>
                                             ))}
                                         </select>
@@ -296,9 +369,14 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                 {/* Sessions */}
                                 {selectedModule && (
                                     <Card>
-                                        <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)] mb-[var(--space-lg)]">
-                                            {selectedModule.modulecode} — {selectedModule.modulename}
-                                        </h2>
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-[var(--space-md)] mb-[var(--space-lg)]">
+                                            <h2 className="text-[var(--font-size-h2)] font-bold text-[var(--color-text-primary)]">
+                                                {selectedModule.modulecode} — {selectedModule.modulename}
+                                            </h2>
+                                            <Button variant="primary" icon={<Plus className="w-4 h-4"/>} onClick={() => setIsAdding(true)}>
+                                                Add Custom Session
+                                            </Button>
+                                        </div>
 
                                         {loadingSessions ? (
                                             <p className="text-sm text-[var(--color-text-secondary)]">Loading sessions...</p>
@@ -330,11 +408,19 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                                 <p className="text-[var(--color-text-secondary)]">{session.modulename}</p>
                                                                 
                                                                 {/* Responsibility Dropdown */}
-                                                                <div className="mt-4 flex items-center gap-2">
-                                                                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">Responsible:</span>
+                                                                <div className="mt-4 flex flex-col gap-1.5">
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 ml-1">Responsibility</span>
                                                                     <select
-                                                                        className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                                                                        className={`
+                                                                            text-xs px-3 py-1.5 border rounded-xl bg-white
+                                                                            transition-all duration-200 outline-none
+                                                                            ${(!selectedModule.lecturers || selectedModule.lecturers.length < 2) 
+                                                                                ? 'border-[#E2E8F0] opacity-50 cursor-not-allowed bg-slate-50' 
+                                                                                : 'border-[#E2E8F0] hover:border-blue-400 focus:ring-4 focus:ring-blue-50/50 cursor-pointer text-slate-700 font-medium'}
+                                                                        `}
                                                                         value={session.lecturerid || ''}
+                                                                        disabled={!selectedModule.lecturers || selectedModule.lecturers.length < 2}
+                                                                        title={(!selectedModule.lecturers || selectedModule.lecturers.length < 2) ? "Only one lecturer assigned to this module" : "Change session responsibility"}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value === '' ? null : parseInt(e.target.value);
                                                                             handleAssignLecturer(session.id, val);
@@ -358,11 +444,17 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                             </div>
                                                             <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                                                                 <Clock className="w-4 h-4 flex-shrink-0" />
-                                                                <span>{formatTime(session.time)} ({session.duration}h)</span>
+                                                                <span>{formatTime(session.time)} ({Number(session.duration)}h)</span>
                                                             </div>
                                                             <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                                                                 <MapPin className="w-4 h-4 flex-shrink-0" />
-                                                                <span>{session.location || 'TBD'}</span>
+                                                                <span className="flex-1 truncate">{session.location || 'TBD'}</span>
+                                                                <button 
+                                                                    onClick={() => { setEditingLocationSession(session); setTempLocation(session.location || ''); }}
+                                                                    className="text-[10px] text-[var(--color-primary)] hover:underline ml-2"
+                                                                >
+                                                                    Edit
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -382,7 +474,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                                                             <span>•</span>
                                                             <span>{formatTime(session.time)}</span>
                                                             <span>•</span>
-                                                            <span>{session.duration}h</span>
+                                                            <span>{Number(session.duration)}h</span>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -539,6 +631,69 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                             </div>
                         )}
                     </div>
+                </div>
+            </Modal>
+
+            {/* Add Custom Session Modal */}
+            {isAdding && selectedModule && (
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-in fade-in zoom-in duration-300">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold text-slate-800">Add Custom Session</h2>
+                    <button onClick={() => setIsAdding(false)} className="p-2 -mr-2 text-slate-400 hover:text-slate-600 transition-colors">
+                      <X className="w-5 h-5"/>
+                    </button>
+                  </div>
+                  <form onSubmit={handleAddSession} className="space-y-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input label="Date" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required variant="premium" />
+                      <AnalogTimePicker label="Time" value={newTime} onChange={setNewTime} />
+                    </div>
+                    <Select 
+                      label="Mode" 
+                      options={[{value: 'Physical', label: 'Physical'}, {value: 'Online', label: 'Online'}]} 
+                      value={newMode} 
+                      onChange={(e) => setNewMode(e.target.value)} 
+                      variant="premium" 
+                    />
+                    <Input label="Duration (hours)" type="number" step="0.5" min="0.5" value={newDuration} onChange={e => setNewDuration(e.target.value)} required variant="premium" />
+                    <Input label="Location or URL" value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="e.g. A4 202 or Zoom Link" variant="premium" />
+                    
+                    <div className="flex gap-3 pt-4">
+                      <Button type="button" variant="ghost" fullWidth onClick={() => setIsAdding(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" variant="primary" fullWidth>
+                        Create Session
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Edit Location Modal */}
+            <Modal
+                isOpen={!!editingLocationSession}
+                onClose={() => setEditingLocationSession(null)}
+                title="Update Session Location"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setEditingLocationSession(null)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleUpdateLocation} loading={isUpdatingLocation}>Update</Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-500">Update the location or meeting link for this session.</p>
+                    <Input 
+                        label="Location or URL" 
+                        value={tempLocation} 
+                        onChange={e => setTempLocation(e.target.value)} 
+                        placeholder="e.g. Room A4 202 or Zoom Link"
+                        variant="premium"
+                        fullWidth
+                    />
                 </div>
             </Modal>
         </div>

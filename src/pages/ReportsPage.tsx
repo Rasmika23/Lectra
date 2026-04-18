@@ -72,7 +72,7 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
     { value: 'all', label: 'All Modules' },
     ...modules.map(m => ({
       value: m.moduleid.toString(),
-      label: `${m.modulecode} - ${m.modulename}`
+      label: `[${m.modulecode}] ${m.modulename} (${m.academicyear} - Sem ${m.semester})`
     }))
   ];
 

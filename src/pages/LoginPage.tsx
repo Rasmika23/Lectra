@@ -5,7 +5,6 @@ import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { Card } from '../components/Card';
 import { Mail, Lock, Sparkles } from 'lucide-react';
-import { getUserByEmail } from '../lib/mockData';
 
 interface LoginPageProps {
   onLogin: (user: any, token?: string) => void;

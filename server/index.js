@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const reportService = require('./services/ReportService');
 const auditLog = require('./services/AuditService');
+const { sendInviteEmail, sendMail } = require('./email');
 
 // ── JWT Auth Middleware ─────────────────────────────────────────────────────
 function authenticateToken(req, res, next) {
@@ -23,6 +24,33 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// ── OTP Helper ─────────────────────────────────────────────────────────────
+async function generateAndSendOTP(userId, email, purpose) {
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60000); // 10 mins
+
+  await db.query(`
+    INSERT INTO otps (userid, otpcode, purpose, expiresat)
+    VALUES ($1, $2, $3, $4)
+  `, [userId, otpCode, purpose, expiresAt]);
+
+  const subject = `Lectra Verification Code - ${purpose.replace(/_/g, ' ')}`;
+  const html = `
+    <div style="font-family: sans-serif; padding: 20px; text-align: center; border: 1px solid #e2e8f0; border-radius: 12px;">
+      <h1 style="color: #0f172a; margin-bottom: 8px;">Verification Code</h1>
+      <p style="color: #64748b; margin-bottom: 24px;">Your verification code for ${purpose.replace(/_/g, ' ').toLowerCase()} is:</p>
+      <div style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0284c7; background: #f0f9ff; padding: 16px; border-radius: 8px; display: inline-block; margin-bottom: 24px;">
+        ${otpCode}
+      </div>
+      <p style="color: #64748b; font-size: 14px;">This code will expire in 10 minutes.</p>
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+      <p style="color: #94a3b8; font-size: 12px;">If you did not request this code, please ignore this email or contact support if you suspect unauthorized access.</p>
+    </div>
+  `;
+  await sendMail(email, subject, `Your verification code is: ${otpCode}`, html);
+  return otpCode;
+}
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -31,8 +59,12 @@ app.use(express.json());
 
 // Set up static uploads folder
 const uploadDir = path.join(__dirname, 'uploads');
+const cvUploadDir = path.join(uploadDir, 'cvs');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
+}
+if (!fs.existsSync(cvUploadDir)) {
+  fs.mkdirSync(cvUploadDir, { recursive: true });
 }
 app.use('/uploads', express.static(uploadDir));
 
@@ -49,6 +81,19 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage });
+
+// Multer Config for CVs
+const cvStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, cvUploadDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `cv-${uniqueSuffix}${ext}`);
+  }
+});
+const cvUpload = multer({ storage: cvStorage });
 
 // Login endpoint
 // Login endpoint
@@ -116,7 +161,6 @@ app.post('/login', async (req, res) => {
 
 // Invite User Endpoint
 const { v4: uuidv4 } = require('uuid');
-const { sendInviteEmail } = require('./email');
 
 app.post('/users/invite', async (req, res) => {
   const { email, role } = req.body;
@@ -215,6 +259,127 @@ app.post('/users/setup', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Auth & Profile Management Endpoints ---
+
+// Request OTP endpoint
+app.post('/auth/request-otp', authenticateToken, async (req, res) => {
+  const { purpose } = req.body;
+  if (!purpose) return res.status(400).json({ error: 'Purpose is required' });
+
+  try {
+    const userRes = await db.query('SELECT email FROM users WHERE userid = $1', [req.user.id]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    
+    await generateAndSendOTP(req.user.id, userRes.rows[0].email, purpose);
+    res.json({ message: 'OTP sent successfully' });
+  } catch (err) {
+    console.error('Error requesting OTP:', err);
+    res.status(500).json({ error: 'Server error sending OTP' });
+  }
+});
+
+// Verify OTP endpoint
+app.post('/auth/verify-otp', authenticateToken, async (req, res) => {
+  const { otpCode, purpose } = req.body;
+  if (!otpCode || !purpose) return res.status(400).json({ error: 'OTP code and purpose are required' });
+
+  try {
+    const otpRes = await db.query(`
+      SELECT * FROM otps 
+      WHERE userid = $1 AND otpcode = $2 AND purpose = $3 AND verified = FALSE AND expiresat > NOW()
+      ORDER BY createdat DESC LIMIT 1
+    `, [req.user.id, otpCode, purpose]);
+
+    if (otpRes.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    await db.query('UPDATE otps SET verified = TRUE WHERE otpid = $1', [otpRes.rows[0].otpid]);
+    res.json({ message: 'OTP verified successfully' });
+  } catch (err) {
+    console.error('Error verifying OTP:', err);
+    res.status(500).json({ error: 'Server error verifying OTP' });
+  }
+});
+
+// Update core user profile (Name, Email, Password)
+app.patch('/user/profile', authenticateToken, async (req, res) => {
+  const { name, email, phone, currentPassword, newPassword, otpCode } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const userRes = await db.query('SELECT * FROM users WHERE userid = $1', [userId]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = userRes.rows[0];
+
+    let updateQuery = 'UPDATE users SET name = $1';
+    let updateParams = [name || user.name];
+
+    // Phone Number update
+    if (phone !== undefined) {
+      updateQuery += `, phonenumber = $${updateParams.length + 1}`;
+      updateParams.push(phone);
+    }
+
+    // 1. Password Change Logic
+    if (newPassword) {
+      if (!currentPassword || !otpCode) {
+        return res.status(400).json({ error: 'Current password and OTP required for password change' });
+      }
+
+      // Verify current password
+      const match = await bcrypt.compare(currentPassword, user.passwordhash);
+      if (!match) return res.status(401).json({ error: 'Incorrect current password' });
+
+      // Verify OTP
+      const otpVerify = await db.query(`
+        SELECT * FROM otps 
+        WHERE userid = $1 AND otpcode = $2 AND purpose = 'PASSWORD_CHANGE' AND verified = TRUE
+        ORDER BY createdat DESC LIMIT 1
+      `, [userId, otpCode]);
+
+      if (otpVerify.rows.length === 0) return res.status(403).json({ error: 'OTP not verified for password change' });
+
+      const newHashed = await bcrypt.hash(newPassword, 10);
+      updateQuery += `, passwordhash = $${updateParams.length + 1}`;
+      updateParams.push(newHashed);
+    }
+
+    // 2. Email Change Logic
+    if (email && email !== user.email) {
+      if (!otpCode) return res.status(400).json({ error: 'OTP required for email change' });
+
+      // Verify OTP specifically for email change
+      const otpVerify = await db.query(`
+        SELECT * FROM otps 
+        WHERE userid = $1 AND otpcode = $2 AND purpose = 'EMAIL_CHANGE' AND verified = TRUE
+        ORDER BY createdat DESC LIMIT 1
+      `, [userId, otpCode]);
+
+      if (otpVerify.rows.length === 0) return res.status(403).json({ error: 'OTP not verified for email change' });
+
+      // Check if email already taken
+      const emailCheck = await db.query('SELECT 1 FROM users WHERE email = $1 AND userid != $2', [email, userId]);
+      if (emailCheck.rows.length > 0) return res.status(409).json({ error: 'Email already in use' });
+
+      updateQuery += `, email = $${updateParams.length + 1}`;
+      updateParams.push(email);
+    }
+
+    updateQuery += ` WHERE userid = $${updateParams.length + 1} RETURNING userid, name, email`;
+    updateParams.push(userId);
+
+    const updated = await db.query(updateQuery, updateParams);
+    
+    await auditLog.record(userId, 'UPDATE_PROFILE', 'USER', userId, { fields: Object.keys(req.body).filter(k => k !== 'currentPassword' && k !== 'newPassword' && k !== 'otpCode') }, req);
+
+    res.json({ message: 'Profile updated successfully', user: updated.rows[0] });
+  } catch (err) {
+    console.error('Error updating user profile:', err);
+    res.status(500).json({ error: 'Server error updating profile' });
   }
 });
 
@@ -319,7 +484,7 @@ app.get('/modules/:id/sessions', authenticateToken, async (req, res) => {
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
         to_char(s.datetime, 'HH24:MI') as time,
-        s.duration,
+        s.duration::float,
         s.locationorurl,
         s.locationorurl as location,
         s.status,
@@ -352,11 +517,13 @@ app.get('/lecturers/:id/sessions', authenticateToken, async (req, res) => {
         s.moduleid,
         m.modulecode,
         mc.modulename,
+        t.academicyear,
+        t.semester,
         s.lecturerid,
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
         to_char(s.datetime, 'HH24:MI') as time,
-        s.duration,
+        s.duration::float,
         s.locationorurl,
         s.locationorurl as location,
         s.status,
@@ -365,6 +532,7 @@ app.get('/lecturers/:id/sessions', authenticateToken, async (req, res) => {
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       JOIN modulelecturer ml ON m.moduleid = ml.moduleid
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE ml.lecturerid = $1
@@ -390,8 +558,8 @@ app.get('/lecturer/profile', authenticateToken, async (req, res) => {
     // Fetch user info, profile, and bank details
     const query = `
       SELECT 
-        u.userid, u.name, u.email,
-        lp.phonenumber, lp.address, lp.nicnumber, lp.cvpath,
+        u.userid, u.name, u.email, u.phonenumber,
+        lp.address, lp.nicnumber, lp.cvpath,
         b.bankname, bd.accountnumber, bd.branch, 
         bd.accountholdername, b.country as bankcountry, b.swiftbic, bd.iban
       FROM users u
@@ -401,8 +569,6 @@ app.get('/lecturer/profile', authenticateToken, async (req, res) => {
       WHERE u.userid = $1
     `;
     const result = await db.query(query, [userId]);
-    const logMsg = `FETCH: user ${userId}, found ${result.rows.length} rows, first row phone: ${result.rows[0]?.phonenumber}\n`;
-    fs.appendFileSync(path.join(__dirname, 'debug_profile.log'), logMsg);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Lecturer not found' });
@@ -435,31 +601,128 @@ app.get('/lecturer/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// CV Upload endpoint
+app.post('/lecturer/profile/cv', authenticateToken, cvUpload.single('cv'), async (req, res) => {
+  if (req.user.role !== 'lecturer') {
+    return res.status(403).json({ error: 'Access denied. Lecturers only.' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const userId = req.user.id;
+  const relativePath = `uploads/cvs/${req.file.filename}`;
+  
+  try {
+    // Update or insert lecturer profile with the new CV path
+    await db.query(`
+      INSERT INTO lecturerprofile (lecturerid, cvpath)
+      VALUES ($1, $2)
+      ON CONFLICT (lecturerid) DO UPDATE SET
+        cvpath = EXCLUDED.cvpath
+    `, [userId, relativePath]);
+
+    await auditLog.record(userId, 'UPLOAD_CV', 'LECTURER_PROFILE', userId, { filename: req.file.filename, path: relativePath }, req);
+
+    res.json({ 
+      message: 'CV uploaded successfully', 
+      cvpath: relativePath,
+      cvFileName: req.file.filename 
+    });
+  } catch (err) {
+    console.error('Error uploading CV:', err);
+    res.status(500).json({ error: 'Server error during CV upload' });
+  }
+});
+
+// Delete CV endpoint
+app.delete('/lecturer/profile/cv', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'lecturer') {
+    return res.status(403).json({ error: 'Access denied. Lecturers only.' });
+  }
+
+  const userId = req.user.id;
+
+  try {
+    // 1. Get current CV path
+    const result = await db.query('SELECT cvpath FROM lecturerprofile WHERE lecturerid = $1', [userId]);
+    
+    if (result.rows.length === 0 || !result.rows[0].cvpath) {
+      return res.status(404).json({ error: 'No CV found to delete' });
+    }
+
+    const currentPath = result.rows[0].cvpath;
+    const fullPath = path.join(__dirname, currentPath);
+
+    // 2. Delete physical file if it exists
+    if (fs.existsSync(fullPath)) {
+      try {
+        fs.unlinkSync(fullPath);
+      } catch (fileErr) {
+        console.error('Error deleting physical CV file:', fileErr);
+        // We continue anyway to clear the DB entry
+      }
+    }
+
+    // 3. Clear path in database
+    await db.query('UPDATE lecturerprofile SET cvpath = NULL WHERE lecturerid = $1', [userId]);
+
+    await auditLog.record(userId, 'DELETE_CV', 'LECTURER_PROFILE', userId, { oldPath: currentPath }, req);
+
+    res.json({ message: 'CV deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting CV:', err);
+    res.status(500).json({ error: 'Server error during CV deletion' });
+  }
+});
+
 // Update lecturer profile and bank details
 app.post('/lecturer/profile', authenticateToken, async (req, res) => {
   if (req.user.role !== 'lecturer') {
     return res.status(403).json({ error: 'Access denied. Lecturers only.' });
   }
 
-  const { phone, address, nicNumber, bankDetails } = req.body;
+  const { phone, address, nicNumber, bankDetails, otpCode } = req.body;
   const userId = req.user.id;
-  fs.appendFileSync(path.join(__dirname, 'debug_profile.log'), `SAVE: user ${userId}, data: ${JSON.stringify({ phone, address, nicNumber })}\n`);
 
   try {
     await db.query('BEGIN');
 
+    // 1. If bank details are being changed, verify OTP
+    if (bankDetails) {
+      if (!otpCode) {
+        await db.query('ROLLBACK');
+        return res.status(400).json({ error: 'OTP required to change bank details' });
+      }
+
+      const otpVerify = await db.query(`
+        SELECT * FROM otps 
+        WHERE userid = $1 AND otpcode = $2 AND purpose = 'BANK_DETAILS_CHANGE' AND verified = TRUE
+        ORDER BY createdat DESC LIMIT 1
+      `, [userId, otpCode]);
+
+      if (otpVerify.rows.length === 0) {
+        await db.query('ROLLBACK');
+        return res.status(403).json({ error: 'OTP not verified for bank details change' });
+      }
+    }
+
     // 1. Update lecturerprofile if contact details are provided
     if (phone !== undefined || address !== undefined || nicNumber !== undefined) {
+      // Update users table for phone number
+      if (phone !== undefined) {
+        await db.query('UPDATE users SET phonenumber = $1 WHERE userid = $2', [phone, userId]);
+      }
+
       const lpResult = await db.query(`
-        INSERT INTO lecturerprofile (lecturerid, phonenumber, address, nicnumber)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO lecturerprofile (lecturerid, address, nicnumber)
+        VALUES ($1, $2, $3)
         ON CONFLICT (lecturerid) DO UPDATE SET
-          phonenumber = COALESCE(EXCLUDED.phonenumber, lecturerprofile.phonenumber),
           address = COALESCE(EXCLUDED.address, lecturerprofile.address),
           nicnumber = COALESCE(EXCLUDED.nicnumber, lecturerprofile.nicnumber)
         RETURNING *
-      `, [userId, phone, address, nicNumber]);
-      fs.appendFileSync(path.join(__dirname, 'debug_profile.log'), `SAVE RESULT: ${JSON.stringify(lpResult.rows[0])}\n`);
+      `, [userId, address, nicNumber]);
     }
 
     // 2. Update bankdetails if provided
@@ -551,33 +814,83 @@ app.delete('/sessions/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Reschedule a session
+// Update session details (Reschedule or change Location)
 app.patch('/sessions/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { datetime, duration, location, lecturerid } = req.body;
 
   try {
-    // If lecturerid is not provided, and the user is a lecturer, assign it to them
-    let targetLecturerId = lecturerid;
-    if (!targetLecturerId && req.user.role === 'lecturer') {
-      targetLecturerId = req.user.id;
-    }
+    const sessionId = parseInt(id);
+    
+    // 1. Fetch current session to check permissions and compare values
+    const currentRes = await db.query(`
+      SELECT s.*, m.subcoordinatorid 
+      FROM session s 
+      JOIN module m ON s.moduleid = m.moduleid 
+      WHERE s.sessionid = $1
+    `, [sessionId]);
 
-    const result = await db.query(
-      `UPDATE session 
-       SET previous_datetime = datetime, datetime = $1, duration = $2, locationorurl = $3, lecturerid = COALESCE($4, lecturerid), status = 'Rescheduled'
-       WHERE sessionid = $5 
-       RETURNING *`,
-      [datetime, duration, location, targetLecturerId || null, parseInt(id)]
-    );
-
-    if (result.rows.length === 0) {
+    if (currentRes.rows.length === 0) {
       return res.status(404).json({ error: 'Session not found' });
     }
+    const current = currentRes.rows[0];
+
+    // 2. Permission check: Sub-coordinator of the module OR any lecturer assigned to the module
+    const isSub = current.subcoordinatorid === req.user.id && req.user.role === 'sub-coordinator';
+    let isLecturer = false;
+    if (req.user.role === 'lecturer') {
+      const mlRes = await db.query('SELECT 1 FROM modulelecturer WHERE moduleid = $1 AND lecturerid = $2', [current.moduleid, req.user.id]);
+      isLecturer = mlRes.rows.length > 0;
+    }
+
+    if (!isSub && !isLecturer && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // 3. Determine if this is a reschedule (time/duration change)
+    const newDatetime = datetime ? new Date(datetime) : null;
+    const oldDatetime = new Date(current.datetime);
+    
+    // Check if time changed (compare epoch to ignore minor format differences)
+    const timeChanged = newDatetime && newDatetime.getTime() !== oldDatetime.getTime();
+    const durationChanged = duration && parseFloat(duration) !== parseFloat(current.duration);
+    
+    const isRescheduling = timeChanged || durationChanged;
+
+    let status = current.status;
+    let previousDatetime = current.previous_datetime;
+
+    if (isRescheduling) {
+      status = 'Rescheduled';
+      previousDatetime = current.datetime;
+    }
+
+    // 4. Perform update
+    const result = await db.query(
+      `UPDATE session 
+       SET 
+         datetime = COALESCE($1, datetime), 
+         duration = COALESCE($2, duration), 
+         locationorurl = COALESCE($3, locationorurl), 
+         lecturerid = COALESCE($4, lecturerid), 
+         status = $5,
+         previous_datetime = $6
+       WHERE sessionid = $7 
+       RETURNING *`,
+      [
+        datetime || null, 
+        duration !== undefined ? parseFloat(duration) : null, 
+        location !== undefined ? location : null, 
+        lecturerid || null, 
+        status,
+        previousDatetime,
+        sessionId
+      ]
+    );
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Error rescheduling session:', err);
+    console.error('Error updating session:', err);
     res.status(500).json({ error: 'Server error updating session' });
   }
 });
@@ -1154,9 +1467,10 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
   try {
     // 1. Assigned Modules
     const modulesQuery = `
-      SELECT m.moduleid, m.modulecode, mc.modulename 
+      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester
       FROM module m
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       WHERE subcoordinatorid = $1
     `;
     
@@ -1189,16 +1503,19 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
         s.moduleid,
         m.modulecode,
         mc.modulename,
+        t.academicyear,
+        t.semester,
         s.datetime,
         to_char(s.datetime, 'YYYY-MM-DD') as date,
         to_char(s.datetime, 'HH24:MI') as time,
-        s.duration,
+        s.duration::float,
         s.locationorurl as location,
         s.status,
         u.name as lecturername
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      JOIN academic_terms t ON m.termid = t.termid
       LEFT JOIN users u ON s.lecturerid = u.userid
       WHERE m.subcoordinatorid = $1 
         AND s.datetime >= NOW()
@@ -1404,7 +1721,6 @@ app.get('/sessions/available-slots', authenticateToken, async (req, res) => {
 });
 
 // Send Custom Message to Assigned Lecturers
-const { sendMail } = require('./email');
 const whatsappService = require('./services/WhatsAppService');
 
 app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
@@ -1472,6 +1788,21 @@ app.post('/modules/:moduleId/sessions', authenticateToken, async (req, res) => {
         const { moduleId } = req.params;
         const { datetime, mode, duration, locationorurl } = req.body;
         if (!datetime || !mode || !duration) return res.status(400).json({ error: 'Missing req params' });
+
+        // Permission check
+        if (req.user.role === 'sub-coordinator') {
+            const moduleRes = await db.query('SELECT subcoordinatorid FROM module WHERE moduleid = $1', [moduleId]);
+            if (moduleRes.rows.length === 0 || moduleRes.rows[0].subcoordinatorid !== req.user.id) {
+                return res.status(403).json({ error: 'Access denied: You are not the sub-coordinator for this module' });
+            }
+        } else if (req.user.role === 'lecturer') {
+            const mlRes = await db.query('SELECT 1 FROM modulelecturer WHERE moduleid = $1 AND lecturerid = $2', [moduleId, req.user.id]);
+            if (mlRes.rows.length === 0) {
+                return res.status(403).json({ error: 'Access denied: You are not assigned to this module' });
+            }
+        } else if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
 
         const query = `
             INSERT INTO session (moduleid, datetime, mode, status, locationorurl, duration, reminder_sent)

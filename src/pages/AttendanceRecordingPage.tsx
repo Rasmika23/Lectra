@@ -32,6 +32,8 @@ interface Module {
   moduleid: number;
   modulecode: string;
   modulename: string;
+  academicyear: string;
+  semester: number | string;
 }
 
 interface AttendanceRecordingPageProps {
@@ -306,7 +308,7 @@ export function AttendanceRecordingPage({
                   <option value="">{isLoadingModules ? 'Loading modules...' : 'Select a module'}</option>
                   {modules.map(m => (
                     <option key={m.moduleid} value={m.moduleid}>
-                      {m.modulecode} - {m.modulename}
+                      [{m.modulecode}] {m.modulename} ({m.academicyear} - Sem {m.semester})
                     </option>
                   ))}
                 </select>

@@ -1,18 +1,21 @@
 import React, { useState, useRef } from 'react';
-import { User, Mail, Lock, Phone, Save, CheckCircle, Sparkles } from 'lucide-react';
+import { User, Mail, Lock, Phone, Save, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
-import { User as UserType } from '../lib/mockData';
+import { OTPModal } from '../components/OTPModal';
+import { fetchWithAuth } from '../lib/api';
+import { toast } from 'sonner';
 import { useScrollToTop } from '../lib/hooks';
 
 interface UserProfilePageProps {
-  currentUser: UserType;
+  currentUser: any;
   onNavigate: (page: string) => void;
   onLogout?: () => void;
+  onUserUpdate?: (user: any) => void;
 }
 
-export function UserProfilePage({ currentUser, onNavigate, onLogout }: UserProfilePageProps) {
+export function UserProfilePage({ currentUser, onNavigate, onLogout, onUserUpdate }: UserProfilePageProps) {
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
   const [phone, setPhone] = useState(currentUser.phone || '');
@@ -22,6 +25,11 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout }: UserProfi
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  
+  // OTP States
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [otpPurpose, setOtpPurpose] = useState<'EMAIL_CHANGE' | 'PASSWORD_CHANGE'>('EMAIL_CHANGE');
+  const [tempData, setTempData] = useState<any>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   useScrollToTop(scrollContainerRef, [showSuccess, passwordError]);
@@ -41,43 +49,141 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout }: UserProfi
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRequestOtp = async (purpose: 'EMAIL_CHANGE' | 'PASSWORD_CHANGE', data: any) => {
     setIsSubmitting(true);
+    try {
+      const response = await fetchWithAuth('http://localhost:5000/auth/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to send OTP');
+      }
+
+      setOtpPurpose(purpose);
+      setTempData(data);
+      setIsOtpModalOpen(true);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifyAndUpdate = async (otpCode: string) => {
+    // First verify locally that OTP matches our purpose on backend indirectly by passing it to update
+    // But backend verify-otp marks it as verified.
+    try {
+      // 1. Mark OTP as verified on backend
+      const verifyRes = await fetchWithAuth('http://localhost:5000/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode, purpose: otpPurpose })
+      });
+
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json();
+        throw new Error(err.error || 'Invalid OTP');
+      }
+
+      // 2. Perform actual update
+      const updateRes = await fetchWithAuth('http://localhost:5000/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...tempData, otpCode })
+      });
+
+      if (!updateRes.ok) {
+        const err = await updateRes.json();
+        throw new Error(err.error || 'Update failed');
+      }
+
+      const result = await updateRes.json();
+      
+      // Update parent state
+      const updatedUser = { ...currentUser, ...result.user };
+      if (onUserUpdate) onUserUpdate(updatedUser);
+      
+      setIsOtpModalOpen(false);
+      setShowSuccess(true);
+      toast.success('Profile updated successfully');
+      
+      // Clear sensitive fields
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTempData(null);
+      
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err: any) {
+      throw err; // Let OTPModal handle the error display
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
     setPasswordError('');
 
-    // Validate password change if attempted
-    if (newPassword || currentPassword || confirmPassword) {
+    const isEmailChanged = email !== currentUser.email;
+    const isPasswordChanging = !!newPassword;
+
+    // Validation
+    if (isPasswordChanging) {
       if (!currentPassword) {
-        setPasswordError('Please enter your current password');
-        setIsSubmitting(false);
+        setPasswordError('Current password is required to set a new password');
         return;
       }
       if (newPassword !== confirmPassword) {
         setPasswordError('New passwords do not match');
-        setIsSubmitting(false);
         return;
       }
       if (newPassword.length < 8) {
-        setPasswordError('New password must be at least 8 characters long');
-        setIsSubmitting(false);
+        setPasswordError('New password must be at least 8 characters');
         return;
       }
     }
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setShowSuccess(true);
-      
-      // Clear password fields
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      
-      // Hide success message after 3 seconds
-      setTimeout(() => setShowSuccess(false), 3000);
-    }, 1000);
+    if (isEmailChanged || isPasswordChanging) {
+      // Trigger OTP flow
+      const purpose = isEmailChanged ? 'EMAIL_CHANGE' : 'PASSWORD_CHANGE';
+      const data = {
+        name,
+        email: isEmailChanged ? email : undefined,
+        phone,
+        currentPassword: isPasswordChanging ? currentPassword : undefined,
+        newPassword: isPasswordChanging ? newPassword : undefined
+      };
+      await handleRequestOtp(purpose, data);
+    } else {
+      // Simple update (Name only)
+      setIsSubmitting(true);
+      try {
+        const response = await fetchWithAuth('http://localhost:5000/user/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const updatedUser = { ...currentUser, ...result.user };
+          if (onUserUpdate) onUserUpdate(updatedUser);
+          setShowSuccess(true);
+          toast.success('Profile updated successfully');
+          setTimeout(() => setShowSuccess(false), 3000);
+        } else {
+          const err = await response.json();
+          toast.error(err.error || 'Failed to update profile');
+        }
+      } catch (err) {
+        toast.error('Connection error');
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
   };
 
   return (
@@ -248,12 +354,20 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout }: UserProfi
             <Button
               type="submit"
               disabled={isSubmitting}
-              icon={<Save className="w-4 h-4" />}
+              icon={isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </form>
+
+        <OTPModal
+          isOpen={isOtpModalOpen}
+          onClose={() => setIsOtpModalOpen(false)}
+          onVerify={handleVerifyAndUpdate}
+          onResend={() => handleRequestOtp(otpPurpose, tempData)}
+          purpose={otpPurpose}
+        />
       </div>
     </main>
   );

@@ -3,18 +3,20 @@ import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { FileUpload } from '../components/FileUpload';
-import { ArrowLeft, CheckCircle, FileText, CreditCard, IdCard, Globe, Landmark, Hash, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, CreditCard, IdCard, Globe, Landmark, Hash, User as UserIcon, Trash2, Mail, User, Save, Loader2 } from 'lucide-react';
 import { fetchWithAuth } from '../lib/api';
 import { useScrollToTop } from '../lib/hooks';
 import { toast } from 'sonner';
+import { OTPModal } from '../components/OTPModal';
 
 interface LecturerProfilePageProps {
   currentUser: any;
   onNavigate: (page: string) => void;
   onLogout?: () => void;
+  onUserUpdate?: (user: any) => void;
 }
 
-export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: LecturerProfilePageProps) {
+export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserUpdate }: LecturerProfilePageProps) {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [bankName, setBankName] = useState('');
@@ -24,6 +26,8 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
   const [swiftBic, setSwiftBic] = useState('');
   const [iban, setIban] = useState('');
   const [nicNumber, setNicNumber] = useState('');
+  const [name, setName] = useState(currentUser.name);
+  const [email, setEmail] = useState(currentUser.email);
   const [cvUploaded, setCvUploaded] = useState(false);
   const [cvFileName, setCvFileName] = useState<string | null>(null);
   
@@ -35,6 +39,11 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
   const [showSuccessContact, setShowSuccessContact] = useState(false);
   const [showSuccessBank, setShowSuccessBank] = useState(false);
+
+  // OTP States
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [otpPurpose, setOtpPurpose] = useState<'EMAIL_CHANGE' | 'BANK_DETAILS_CHANGE'>('EMAIL_CHANGE');
+  const [tempData, setTempData] = useState<any>(null);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // We'll use a local hook or just scroll manually if needed
@@ -71,22 +80,89 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
     fetchProfile();
   }, []);
 
-  const handleSaveContact = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingContact(true);
-    console.log('FRONTEND: Saving contact info:', { phone, address, nicNumber });
-    
+  const handleRequestOtp = async (purpose: 'EMAIL_CHANGE' | 'BANK_DETAILS_CHANGE', data: any) => {
+    // If it's a contact update but name changed without email, we don't need OTP
+    // This is handled in handleSaveContact
     try {
-      const response = await fetchWithAuth('http://localhost:5000/lecturer/profile', {
+      const response = await fetchWithAuth('http://localhost:5000/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone,
-          address,
-          nicNumber
-          // CV upload would typically be a separate request if we're doing file upload,
-          // but for now, we're just saving textual details.
-        })
+        body: JSON.stringify({ purpose })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to send OTP');
+      }
+
+      setOtpPurpose(purpose);
+      setTempData(data);
+      setIsOtpModalOpen(true);
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleVerifyAndUpdate = async (otpCode: string) => {
+    try {
+      // 1. Verify OTP
+      const verifyRes = await fetchWithAuth('http://localhost:5000/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode, purpose: otpPurpose })
+      });
+
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json();
+        throw new Error(err.error || 'Invalid OTP');
+      }
+
+      // 2. Perform Update based on purpose
+      if (otpPurpose === 'EMAIL_CHANGE') {
+        const response = await fetchWithAuth('http://localhost:5000/user/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: tempData.name, email: tempData.email, otpCode })
+        });
+
+        if (response.ok) {
+           const result = await response.json();
+           const updatedUser = { ...currentUser, ...result.user };
+           if (onUserUpdate) onUserUpdate(updatedUser);
+           // Now save the rest of lecturer info
+           await saveLecturerProfile(tempData.lecturerData);
+        } else {
+           const err = await response.json();
+           throw new Error(err.error || 'Failed to update user profile');
+        }
+      } else if (otpPurpose === 'BANK_DETAILS_CHANGE') {
+        const response = await fetchWithAuth('http://localhost:5000/lecturer/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bankDetails: tempData.bankDetails, otpCode })
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Failed to update bank details');
+        }
+        setShowSuccessBank(true);
+        toast.success('Bank details updated');
+        setTimeout(() => setShowSuccessBank(false), 3000);
+      }
+
+      setIsOtpModalOpen(false);
+      setTempData(null);
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const saveLecturerProfile = async (data: any) => {
+    const response = await fetchWithAuth('http://localhost:5000/lecturer/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
       });
 
       if (response.ok) {
@@ -97,9 +173,57 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
         const errorData = await response.json();
         toast.error(errorData.error || 'Failed to update contact info');
       }
-    } catch (error) {
-      console.error('Error updating contact info:', error);
-      toast.error('An error occurred while saving contact info');
+  };
+
+  const handleSaveContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingContact(true);
+    
+    try {
+      // 1. CV Upload (independent)
+      if (cvFile) {
+        const formData = new FormData();
+        formData.append('cv', cvFile);
+        const cvResponse = await fetchWithAuth('http://localhost:5000/lecturer/profile/cv', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!cvResponse.ok) {
+          const errorData = await cvResponse.json();
+          throw new Error(errorData.error || 'Failed to upload CV');
+        }
+
+        const cvData = await cvResponse.json();
+        setCvUploaded(true);
+        setCvFileName(cvData.cvFileName);
+        setCvFile(null);
+        toast.success('CV uploaded successfully');
+      }
+
+      const isNameChanged = name !== currentUser.name;
+      const isEmailChanged = email !== currentUser.email;
+      const lecturerData = { phone, address, nicNumber };
+
+      if (isEmailChanged) {
+        await handleRequestOtp('EMAIL_CHANGE', { name, email, lecturerData });
+      } else {
+        // Just name or other contact info
+        if (isNameChanged) {
+            await fetchWithAuth('http://localhost:5000/user/profile', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const updatedUser = { ...currentUser, name };
+            if (onUserUpdate) onUserUpdate(updatedUser);
+        }
+        await saveLecturerProfile(lecturerData);
+      }
+
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      toast.error(error.message || 'An error occurred while saving profile');
     } finally {
       setIsSubmittingContact(false);
     }
@@ -107,37 +231,39 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
 
   const handleSaveBank = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmittingBank(true);
+    const bankDetails = {
+        bankName,
+        accountNumber,
+        accountHolderName,
+        bankCountry,
+        swiftBic,
+        iban
+      };
     
+    await handleRequestOtp('BANK_DETAILS_CHANGE', { bankDetails });
+  };
+
+  const handleDeleteCv = async () => {
+    if (!window.confirm('Are you sure you want to remove your current CV?')) {
+      return;
+    }
+
     try {
-      const response = await fetchWithAuth('http://localhost:5000/lecturer/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bankDetails: {
-            bankName,
-            accountNumber,
-            accountHolderName,
-            bankCountry,
-            swiftBic,
-            iban
-          }
-        })
+      const response = await fetchWithAuth('http://localhost:5000/lecturer/profile/cv', {
+        method: 'DELETE',
       });
 
       if (response.ok) {
-        setShowSuccessBank(true);
-        toast.success('Bank details updated successfully');
-        setTimeout(() => setShowSuccessBank(false), 3000);
+        setCvUploaded(false);
+        setCvFileName(null);
+        toast.success('CV removed successfully');
       } else {
         const errorData = await response.json();
-        toast.error(errorData.error || 'Failed to update bank details');
+        toast.error(errorData.error || 'Failed to delete CV');
       }
     } catch (error) {
-      console.error('Error updating bank details:', error);
-      toast.error('An error occurred while saving bank details');
-    } finally {
-      setIsSubmittingBank(false);
+      console.error('Error deleting CV:', error);
+      toast.success('An error occurred while deleting CV');
     }
   };
   
@@ -196,19 +322,21 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
                     <Input
                       label="Full Name"
                       type="text"
-                      value={currentUser.name}
-                      disabled
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       fullWidth
-                      helperText="Contact your coordinator to update your name"
+                      icon={<User className="w-4 h-4" />}
+                      helperText="Contact your coordinator if you need to update your official name."
                     />
                     
                     <Input
                       label="Email Address"
                       type="email"
-                      value={currentUser.email}
-                      disabled
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       fullWidth
-                      helperText="Contact your coordinator to update your email"
+                      icon={<Mail className="w-4 h-4" />}
+                      helperText="Changing your email will require verification."
                     />
                     
                     <Input
@@ -263,25 +391,45 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
                     </div>
                     
                     <div className="space-y-[var(--space-md)]">
-                      {cvUploaded && (
-                        <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded-lg flex items-center justify-between">
-                          <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
-                            Current file: <span className="font-medium text-[var(--color-text-primary)]">{cvFileName}</span>
-                          </p>
-                          <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-success)]">
-                            <CheckCircle className="w-4 h-4" />
-                            <span className="text-[var(--font-size-small)]">Uploaded</span>
+                      {cvUploaded ? (
+                        <div className="p-[var(--space-md)] bg-[var(--color-bg-sidebar)] border border-[#E2E8F0] rounded-xl flex items-center justify-between group hover:border-[var(--color-primary)] transition-all">
+                          <div className="flex items-center gap-[var(--space-md)]">
+                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="text-[var(--font-size-small)] font-medium text-[var(--color-text-primary)]">
+                                    Current CV
+                                </p>
+                                <p className="text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
+                                    {cvFileName}
+                                </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-[var(--space-md)]">
+                            <div className="hidden sm:flex items-center gap-[var(--space-sm)] text-[var(--color-success)] px-[var(--space-sm)] py-1 bg-green-50 rounded-full border border-green-100">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-xs font-medium uppercase tracking-wider">Active</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleDeleteCv}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors group-hover:opacity-100"
+                                title="Remove CV"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
                           </div>
                         </div>
+                      ) : (
+                        <FileUpload
+                          label="Upload CV"
+                          accept=".pdf,.doc,.docx"
+                          maxSize={10}
+                          onChange={setCvFile}
+                          helperText="Accepted formats: PDF, DOC, DOCX (Max 10MB)"
+                        />
                       )}
-                      
-                      <FileUpload
-                        label={cvUploaded ? "Upload New CV (Optional)" : "Upload CV"}
-                        accept=".pdf,.doc,.docx"
-                        maxSize={10}
-                        onChange={setCvFile}
-                        helperText="Accepted formats: PDF, DOC, DOCX (Max 10MB)"
-                      />
                     </div>
                   </div>
 
@@ -401,6 +549,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
                       type="submit"
                       variant="primary"
                       disabled={isSubmittingBank}
+                      icon={isSubmittingBank ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     >
                       {isSubmittingBank ? 'Saving...' : 'Save Bank Details'}
                     </Button>
@@ -408,6 +557,15 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout }: Lectu
                 </form>
               </Card>
             </section>
+
+            <OTPModal
+              isOpen={isOtpModalOpen}
+              onClose={() => setIsOtpModalOpen(false)}
+              onVerify={handleVerifyAndUpdate}
+              onResend={() => handleRequestOtp(otpPurpose, tempData)}
+              purpose={otpPurpose}
+            />
+
             
             {/* Privacy Notice at the very bottom */}
             <Card className="bg-[#DBEAFE] border-[var(--color-info)]">
