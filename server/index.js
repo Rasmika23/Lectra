@@ -51,6 +51,50 @@ async function generateAndSendOTP(userId, email, purpose) {
   return otpCode;
 }
 
+// ── Notification Helper for Sub-Coordinators ────────────────────────────────
+async function notifySubCoordinator(moduleId, subject, message) {
+  try {
+    const moduleRes = await db.query(`
+      SELECT m.modulecode, mc.modulename, m.subcoordinatorid 
+      FROM module m 
+      JOIN module_catalog mc ON m.modulecode = mc.modulecode 
+      WHERE m.moduleid = $1
+    `, [moduleId]);
+
+    if (moduleRes.rows.length === 0 || !moduleRes.rows[0].subcoordinatorid) return;
+
+    const { modulecode, modulename, subcoordinatorid } = moduleRes.rows[0];
+    const subRes = await db.query('SELECT name, email, phonenumber FROM users WHERE userid = $1', [subcoordinatorid]);
+    
+    if (subRes.rows.length === 0) return;
+    const sub = subRes.rows[0];
+
+    const fullSubject = `${subject}: ${modulecode}`;
+    const formattedMessage = `Dear ${sub.name},\n\n${message}\n\nModule: ${modulecode} - ${modulename}\n\n_Lectra VLMS_`;
+    const htmlMessage = `
+      <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #0f172a;">${subject}</h2>
+        <p>Dear ${sub.name},</p>
+        <p>${message.replace(/\n/g, '<br>')}</p>
+        <p><strong>Module:</strong> ${modulecode} - ${modulename}</p>
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+        <p style="color: #94a3b8; font-size: 12px;">This is an automated notification from Lectra VLMS.</p>
+      </div>
+    `;
+
+    if (sub.email) {
+      await sendMail(sub.email, fullSubject, formattedMessage, htmlMessage);
+    }
+
+    if (sub.phonenumber) {
+      const waMessage = `*${subject}*\n\n${formattedMessage}`;
+      await whatsappService.sendMessage(sub.phonenumber, waMessage);
+    }
+  } catch (err) {
+    console.error('Error in notifySubCoordinator:', err);
+  }
+}
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -394,6 +438,7 @@ app.get('/users', authenticateToken, async (req, res) => {
         u.name, 
         u.email, 
         r.rolename,
+        lp.cvpath,
         CASE
           WHEN r.rolename = 'SubCoordinator' THEN
             (SELECT string_agg(m.modulecode, ', ') FROM module m WHERE m.subcoordinatorid = u.userid)
@@ -407,6 +452,7 @@ app.get('/users', authenticateToken, async (req, res) => {
         END as assignedmodules
       FROM users u 
       JOIN roles r ON u.roleid = r.roleid 
+      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       ORDER BY u.userid DESC
     `;
     const result = await db.query(query);
@@ -427,7 +473,8 @@ app.get('/users', authenticateToken, async (req, res) => {
         name: user.name,
         email: user.email,
         role: frontendRole,
-        assignedModules: user.assignedmodules || ''
+        assignedModules: user.assignedmodules || '',
+        cvPath: user.cvpath
       };
     });
 
@@ -677,6 +724,37 @@ app.delete('/lecturer/profile/cv', authenticateToken, async (req, res) => {
   }
 });
 
+// Download CV endpoint
+app.get('/lecturers/:id/cv/download', authenticateToken, async (req, res) => {
+  // Allow Main Coordinators and Sub-Coordinators
+  if (req.user.role !== 'main-coordinator' && req.user.role !== 'sub-coordinator' && req.user.role !== 'lecturer') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  const { id } = req.params;
+  const targetId = parseInt(id);
+
+  try {
+    const result = await db.query('SELECT cvpath FROM lecturerprofile WHERE lecturerid = $1', [targetId]);
+    
+    if (result.rows.length === 0 || !result.rows[0].cvpath) {
+      return res.status(404).json({ error: 'CV not found for this lecturer' });
+    }
+
+    const cvPath = result.rows[0].cvpath;
+    const fullPath = path.join(__dirname, cvPath);
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'CV file not found on server' });
+    }
+
+    res.download(fullPath, path.basename(cvPath));
+  } catch (err) {
+    console.error('Error downloading CV:', err);
+    res.status(500).json({ error: 'Server error during CV download' });
+  }
+});
+
 // Update lecturer profile and bank details
 app.post('/lecturer/profile', authenticateToken, async (req, res) => {
   if (req.user.role !== 'lecturer') {
@@ -888,7 +966,28 @@ app.patch('/sessions/:id', authenticateToken, async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    const updatedSession = result.rows[0];
+
+    // 5. Notifications & Audit Logging
+    if (isRescheduling) {
+      await auditLog.record(req.user.id, 'RESCHEDULE_SESSION', 'SESSION', sessionId, { 
+        moduleid: updatedSession.moduleid, 
+        oldTime: current.datetime, 
+        newTime: updatedSession.datetime 
+      }, req);
+
+      // Notify Sub-Coordinator if someone else rescheduled
+      if (current.subcoordinatorid && current.subcoordinatorid !== req.user.id) {
+        const msg = `Lecturer ${req.user.name} has rescheduled a session.\n\n` +
+                    `Original: ${new Date(current.datetime).toLocaleString()}\n` +
+                    `New: ${new Date(updatedSession.datetime).toLocaleString()}`;
+        await notifySubCoordinator(updatedSession.moduleid, 'Session Rescheduled', msg);
+      }
+    } else {
+      await auditLog.record(req.user.id, 'UPDATE_SESSION', 'SESSION', sessionId, { fields: Object.keys(req.body) }, req);
+    }
+
+    res.json(updatedSession);
   } catch (err) {
     console.error('Error updating session:', err);
     res.status(500).json({ error: 'Server error updating session' });
@@ -1688,9 +1787,10 @@ app.get('/modules/:id/lecturers', authenticateToken, async (req, res) => {
     if (isNaN(moduleId)) return res.status(400).json({ error: 'Invalid module ID' });
 
     const query = `
-      SELECT u.userid as id, u.name, u.email, ml.wants_reminders
+      SELECT u.userid as id, u.name, u.email, ml.wants_reminders, lp.cvpath
       FROM modulelecturer ml
       JOIN users u ON ml.lecturerid = u.userid
+      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       WHERE ml.moduleid = $1
     `;
     const result = await db.query(query, [moduleId]);
@@ -1810,7 +1910,26 @@ app.post('/modules/:moduleId/sessions', authenticateToken, async (req, res) => {
             RETURNING *
         `;
         const result = await db.query(query, [moduleId, datetime, mode, locationorurl, duration]);
-        res.status(201).json(result.rows[0]);
+        const newSession = result.rows[0];
+
+        // Audit Logging
+        await auditLog.record(req.user.id, 'ADD_CUSTOM_SESSION', 'SESSION', newSession.sessionid, { 
+            moduleId, 
+            datetime, 
+            mode 
+        }, req);
+
+        // Notify Sub-Coordinator if someone else added it
+        const modCheck = await db.query('SELECT subcoordinatorid FROM module WHERE moduleid = $1', [moduleId]);
+        if (modCheck.rows.length > 0 && modCheck.rows[0].subcoordinatorid && modCheck.rows[0].subcoordinatorid !== req.user.id) {
+            const msg = `Lecturer ${req.user.name} has added a new custom session.\n\n` +
+                        `Scheduled at: ${new Date(datetime).toLocaleString()}\n` +
+                        `Mode: ${mode}\n` +
+                        `Location: ${locationorurl || 'TBD'}`;
+            await notifySubCoordinator(moduleId, 'New Session Added', msg);
+        }
+
+        res.status(201).json(newSession);
     } catch (err) {
         res.status(500).json({ error: 'Server error: ' + err.message });
     }
@@ -2011,13 +2130,21 @@ app.get('/sessions/:id/attendance', authenticateToken, async (req, res) => {
 // Record attendance for a session
 app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { attendance, topicsCovered, actualDuration } = req.body;
+  const { attendance, topicsCovered, actualDuration, location } = req.body;
   const sessionId = parseInt(id);
 
   try {
     await db.query('BEGIN');
 
-    // 1. Update/Insert Session Details
+    // 1. Update Session Location if provided
+    if (location !== undefined) {
+      await db.query(
+        'UPDATE session SET locationorurl = $1 WHERE sessionid = $2',
+        [location, sessionId]
+      );
+    }
+
+    // 2. Update/Insert Session Details
     // We fetch existing details first to allow partial updates
     const existingDetails = await db.query('SELECT * FROM sessiondetails WHERE sessionid = $1', [sessionId]);
     
@@ -2040,7 +2167,7 @@ app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
       [sessionId, finalTopicsCovered || '', finalActualDuration || 0, req.user.id]
     );
 
-    // 2. Update Attendance
+    // 3. Update Attendance
     // If attendance is provided, update it. If not, keep existing (or clear if explicit empty object)
     if (attendance && typeof attendance === 'object') {
       await db.query('DELETE FROM sessionattendance WHERE sessionid = $1', [sessionId]);
@@ -2052,14 +2179,18 @@ app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
       }
     }
 
-    // 3. Update Session Status
+    // 4. Update Session Status
     await db.query(
       "UPDATE session SET status = 'Completed' WHERE sessionid = $1",
       [sessionId]
     );
 
     await db.query('COMMIT');
-    await auditLog.record(req.user.id, 'MARK_ATTENDANCE', 'SESSION', sessionId, { topicsCovered: finalTopicsCovered, actualDuration: finalActualDuration }, req);
+    await auditLog.record(req.user.id, 'MARK_ATTENDANCE', 'SESSION', sessionId, { 
+      topicsCovered: finalTopicsCovered, 
+      actualDuration: finalActualDuration,
+      location: location 
+    }, req);
     res.json({ message: 'Attendance recorded successfully' });
   } catch (err) {
     await db.query('ROLLBACK');

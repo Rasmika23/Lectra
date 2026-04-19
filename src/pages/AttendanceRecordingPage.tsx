@@ -60,6 +60,7 @@ export function AttendanceRecordingPage({
   const [attendance, setAttendance] = useState<{ [key: string]: boolean | null }>({});
   const [topicsCovered, setTopicsCovered] = useState('');
   const [actualDuration, setActualDuration] = useState('');
+  const [location, setLocation] = useState('');
   
   const [isLoadingModules, setIsLoadingModules] = useState(true);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
@@ -167,6 +168,10 @@ export function AttendanceRecordingPage({
               setTopicsCovered('');
               setActualDuration(session?.duration.toString() || '');
             }
+
+            // Always update location from the session itself (refreshed in state)
+            const session = sessions.find(s => s.sessionid.toString() === selectedSession);
+            setLocation(session?.location || '');
           }
         }
       } catch (err: any) {
@@ -203,7 +208,8 @@ export function AttendanceRecordingPage({
         body: JSON.stringify({
           attendance,
           topicsCovered,
-          actualDuration: parseFloat(actualDuration) || 0
+          actualDuration: parseFloat(actualDuration) || 0,
+          location
         })
       });
 
@@ -301,6 +307,7 @@ export function AttendanceRecordingPage({
                     setAttendance({});
                     setTopicsCovered('');
                     setActualDuration('');
+                    setLocation('');
                   }}
                   disabled={isLoadingModules}
                   className="w-full px-[var(--space-md)] py-[var(--space-sm)] border border-[#CBD5E1] rounded-lg text-[var(--font-size-body)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-opacity-20 disabled:bg-gray-50 disabled:cursor-not-allowed"
@@ -377,7 +384,15 @@ export function AttendanceRecordingPage({
                       </div>
                       <div className="flex items-center gap-[var(--space-sm)] text-[var(--color-text-secondary)]">
                         <MapPin className="w-4 h-4 flex-shrink-0" />
-                        <span>{currentSession.location || 'N/A'}</span>
+                        <div className="flex-1">
+                          <input 
+                            type="text"
+                            value={location}
+                            onChange={(e) => setLocation(e.target.value)}
+                            placeholder="Location (e.g. Lab 01, Zoom link)"
+                            className="w-full px-2 py-1 bg-white border border-[#CBD5E1] rounded text-[var(--font-size-small)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

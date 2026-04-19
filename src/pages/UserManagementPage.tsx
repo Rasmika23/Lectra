@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
-import { Users, Search, Trash2, Shield, Mail, Calendar, UserPlus } from 'lucide-react';
+import { Users, Search, Trash2, Shield, Mail, Calendar, UserPlus, FileText, Download } from 'lucide-react';
 import { authHeaders } from '../lib/api';
 
 interface User {
@@ -13,6 +13,7 @@ interface User {
     department: string;
     joinDate: string;
     assignedModules?: string;
+    cvPath?: string;
 }
 
 interface UserManagementPageProps {
@@ -70,6 +71,29 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
         } finally {
             setIsDeleting(null);
         }
+    };
+
+    const handleDownloadCV = (userId: string, userName: string) => {
+        const url = `http://localhost:5000/lecturers/${userId}/cv/download`;
+        fetch(url, { headers: authHeaders() })
+            .then(res => {
+                if (res.ok) return res.blob();
+                throw new Error('Failed to download CV');
+            })
+            .then(blob => {
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = `CV_${userName.replace(/\s+/g, '_')}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(blobUrl);
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Could not download CV. It might not be uploaded yet.');
+            });
     };
 
     const getRoleDisplay = (role: string) => {
@@ -163,10 +187,11 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-[var(--color-bg-sidebar)] border-b border-[#E2E8F0] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
-                                            <th className="p-[var(--space-md)] font-semibold w-[40%]">User Details</th>
-                                            <th className="p-[var(--space-md)] font-semibold w-[20%]">Role</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[20%]">User Details</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[15%]">Role</th>
                                             <th className="p-[var(--space-md)] font-semibold w-[20%]">Assigned Modules</th>
-                                            <th className="p-[var(--space-md)] font-semibold w-[20%] text-right">Actions</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[15%]">CV</th>
+                                            <th className="p-[var(--space-md)] font-semibold w-[15%] text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -204,6 +229,19 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
                                                     </td>
                                                     <td className="p-[var(--space-md)] text-[var(--font-size-small)] text-[var(--color-text-secondary)]">
                                                         {user.assignedModules || '-'}
+                                                    </td>
+                                                    <td className="p-[var(--space-md)]">
+                                                        {user.role === 'lecturer' ? (
+                                                            <button
+                                                                onClick={() => handleDownloadCV(user.id, user.name)}
+                                                                className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${user.cvPath ? 'text-[var(--color-primary)] hover:text-[var(--color-secondary)]' : 'text-gray-300 cursor-not-allowed'}`}
+                                                                disabled={!user.cvPath}
+                                                                title={user.cvPath ? 'Download CV' : 'No CV uploaded'}
+                                                            >
+                                                                <span>CV</span>
+                                                                <Download className="w-3 h-3" />
+                                                            </button>
+                                                        ) : '-'}
                                                     </td>
                                                     <td className="p-[var(--space-md)] text-right">
                                                         <Button

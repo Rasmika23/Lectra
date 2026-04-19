@@ -9,14 +9,14 @@ import {
   ArrowLeft, CheckCircle, Upload, Plus,
   ChevronRight, Users, User, BookOpen, X, AlertCircle,
   UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2, MapPin,
-  Download
+  Download, FileText
 } from 'lucide-react';
 import sampleTimetable from '../assets/Sample Timetable.xlsx';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
 
-interface Lecturer { id: number; name: string; email?: string; wants_reminders?: boolean; }
+interface Lecturer { id: number; name: string; email?: string; wants_reminders?: boolean; cvpath?: string; }
 interface Module {
   moduleid: number;
   modulecode: string;
@@ -423,6 +423,29 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     } finally {
       setSendingMessage(false);
     }
+  };
+
+  const handleDownloadCV = (userId: number, userName: string) => {
+    const url = `http://localhost:5000/lecturers/${userId}/cv/download`;
+    fetch(url, { headers: authHeaders() })
+        .then(res => {
+            if (res.ok) return res.blob();
+            throw new Error('Failed to download CV');
+        })
+        .then(blob => {
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `CV_${userName.replace(/\s+/g, '_')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(blobUrl);
+        })
+        .catch(err => {
+            console.error(err);
+            toast.error('Could not download CV. It might not be uploaded yet.');
+        });
   };
 
   const toggleMessageLecturer = (id: number) => {
@@ -840,6 +863,15 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                     {isMainCoordinator && (
                       <Button variant="ghost" size="sm" icon={<X className="w-3.5 h-3.5" />} onClick={() => handleRemoveLecturer(lec.id)} className="text-red-500 hover:bg-red-50 hover:text-red-700">Remove</Button>
                     )}
+                    
+                    <button
+                        onClick={() => handleDownloadCV(lec.id, lec.name)}
+                        className={`p-2 rounded-lg transition-all ${lec.cvpath ? 'text-[var(--color-primary)] hover:bg-blue-100' : 'text-gray-300 cursor-not-allowed'}`}
+                        disabled={!lec.cvpath}
+                        title={lec.cvpath ? 'Download CV' : 'No CV uploaded'}
+                    >
+                        <FileText className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               ))}
