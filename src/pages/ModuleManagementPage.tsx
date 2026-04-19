@@ -11,7 +11,7 @@ import {
   UserX, UserCheck, Clock, Bell, Trash2, Search, Calendar, Edit2, MapPin,
   Download, FileText
 } from 'lucide-react';
-import sampleTimetable from '../assets/Sample Timetable.xlsx';
+import sampleTimetable from '../assets/Sample Timetable.xlsx?url';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
