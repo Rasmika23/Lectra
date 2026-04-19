@@ -2211,18 +2211,18 @@ app.get('/audit-log', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT 
-        al.log_id,
+        al.logid,
         al.action_type,
         al.target_type,
         al.target_id,
         al.details,
         al.ip_address,
-        al.created_at,
+        al.createdat,
         u.name as user_name,
         u.email as user_email
       FROM audit_log al
       LEFT JOIN users u ON al.user_id = u.userid
-      ORDER BY al.created_at DESC
+      ORDER BY al.createdat DESC
       LIMIT $1
     `;
     const result = await db.query(query, [limit]);
