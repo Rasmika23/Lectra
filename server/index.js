@@ -1044,19 +1044,67 @@ app.patch('/sessions/:id/assign', authenticateToken, async (req, res) => {
 // Delete user
 app.delete('/users/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const targetUserId = parseInt(id);
+
+  if (isNaN(targetUserId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  // Permission Check: Only Main Coordinator can delete users
+  if (req.user.role !== 'main-coordinator') {
+    return res.status(403).json({ error: 'Access denied. Only Main Coordinators can delete users.' });
+  }
+
+  // Prevent self-deletion
+  if (req.user.id === targetUserId) {
+    return res.status(400).json({ error: 'You cannot delete your own account.' });
+  }
 
   try {
-    const result = await db.query('DELETE FROM users WHERE userid = $1 RETURNING userid', [id]);
+    await db.query('BEGIN');
 
-    if (result.rows.length > 0) {
-      await auditLog.record(req.user.id, 'DELETE_USER', 'USER', id, { targetUserId: id }, req);
-      res.json({ message: 'User deleted successfully' });
-    } else {
-      res.status(404).json({ error: 'User not found' });
+    // 1. Delete OTPs (already has CASCADE in DB, but good to be explicit or just let CASCADE handle it)
+    await db.query('DELETE FROM otps WHERE userid = $1', [targetUserId]);
+
+    // 2. Delete Lecturer Profile & Bank Details
+    await db.query('DELETE FROM lecturerprofile WHERE lecturerid = $1', [targetUserId]);
+    await db.query('DELETE FROM bankdetails WHERE lecturerid = $1', [targetUserId]);
+
+    // 3. Delete Module Assignments & Attendance
+    await db.query('DELETE FROM modulelecturer WHERE lecturerid = $1', [targetUserId]);
+    await db.query('DELETE FROM sessionattendance WHERE lecturerid = $1', [targetUserId]);
+    await db.query('DELETE FROM reminder WHERE recipientid = $1', [targetUserId]);
+
+    // 4. Update references in related tables (don't delete the records themselves)
+    
+    // Set subcoordinator to NULL in modules
+    await db.query('UPDATE module SET subcoordinatorid = NULL WHERE subcoordinatorid = $1', [targetUserId]);
+    
+    // Set lecturer to NULL in sessions
+    await db.query('UPDATE session SET lecturerid = NULL WHERE lecturerid = $1', [targetUserId]);
+    
+    // Set recorder to NULL in session details
+    await db.query('UPDATE sessiondetails SET recordedby = NULL WHERE recordedby = $1', [targetUserId]);
+    
+    // Set user to NULL in audit logs (if we want to preserve the history)
+    await db.query('UPDATE audit_log SET user_id = NULL WHERE user_id = $1', [targetUserId]);
+
+    // 5. Finally delete the user
+    const result = await db.query('DELETE FROM users WHERE userid = $1 RETURNING userid', [targetUserId]);
+
+    if (result.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
     }
+
+    await auditLog.record(req.user.id, 'DELETE_USER', 'USER', targetUserId, { targetUserId }, req);
+    
+    await db.query('COMMIT');
+    res.json({ message: 'User and all associated data handled successfully' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error deleting user' });
+    await db.query('ROLLBACK');
+    console.error('Error deleting user:', err);
+    res.status(500).json({ error: 'Server error deleting user: ' + err.message });
   }
 });
 
