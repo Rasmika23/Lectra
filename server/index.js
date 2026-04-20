@@ -1,12 +1,12 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const db = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const SlotFinderService = require('./services/SlotFinderService');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 const reportService = require('./services/ReportService');
 const auditLog = require('./services/AuditService');
@@ -234,7 +234,7 @@ app.post('/users/invite', async (req, res) => {
     );
 
     // Send Email
-    const inviteLink = `http://localhost:3000/setup-account?email=${encodeURIComponent(email)}`;
+    const inviteLink = `${process.env.VITE_FRONTEND_URL || 'http://localhost:3000'}/setup-account?email=${encodeURIComponent(email)}`;
     const emailResult = await sendInviteEmail(email, inviteLink);
 
     if (emailResult.success) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
@@ -10,7 +11,7 @@ import { toast } from 'sonner';
 import { authHeaders, fetchWithAuth } from '../lib/api';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
 
-const API = 'http://localhost:5000';
+const API = API_BASE_URL;
 
 interface Module {
   moduleid: number;

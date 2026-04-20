@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { API_BASE_URL } from '../config';
 import { User, Mail, Lock, Phone, Save, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
@@ -52,7 +53,7 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout, onUserUpdat
   const handleRequestOtp = async (purpose: 'EMAIL_CHANGE' | 'PASSWORD_CHANGE', data: any) => {
     setIsSubmitting(true);
     try {
-      const response = await fetchWithAuth('http://localhost:5000/auth/request-otp', {
+      const response = await fetchWithAuth(`${API_BASE_URL}/auth/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ purpose })
@@ -78,7 +79,7 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout, onUserUpdat
     // But backend verify-otp marks it as verified.
     try {
       // 1. Mark OTP as verified on backend
-      const verifyRes = await fetchWithAuth('http://localhost:5000/auth/verify-otp', {
+      const verifyRes = await fetchWithAuth(`${API_BASE_URL}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otpCode, purpose: otpPurpose })
@@ -90,7 +91,7 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout, onUserUpdat
       }
 
       // 2. Perform actual update
-      const updateRes = await fetchWithAuth('http://localhost:5000/user/profile', {
+      const updateRes = await fetchWithAuth(`${API_BASE_URL}/user/profile`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...tempData, otpCode })
@@ -161,7 +162,7 @@ export function UserProfilePage({ currentUser, onNavigate, onLogout, onUserUpdat
       // Simple update (Name only)
       setIsSubmitting(true);
       try {
-        const response = await fetchWithAuth('http://localhost:5000/user/profile', {
+        const response = await fetchWithAuth(`${API_BASE_URL}/user/profile`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, phone })

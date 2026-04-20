@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { fetchWithAuth } from '../lib/api';
 import { Search, Filter, Clock, User, Activity, Globe, Info, ChevronDown, ChevronUp } from 'lucide-react';
@@ -30,7 +31,7 @@ export function AuditLogPage() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const res = await fetchWithAuth('http://localhost:5000/audit-log');
+      const res = await fetchWithAuth(`${API_BASE_URL}/audit-log`);
       const data = await res.json();
       setLogs(data);
     } catch (error) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from './config';
 import { authHeaders } from './lib/api';
 import { jwtDecode } from 'jwt-decode';
 import { Toaster, toast } from 'sonner';
@@ -91,7 +92,7 @@ export default function App() {
 
     const checkConnection = async () => {
       try {
-        const response = await fetch('http://localhost:5000/test-db', { headers: authHeaders() });
+        const response = await fetch(`${API_BASE_URL}/test-db`, { headers: authHeaders() });
         const data = await response.json();
         if (data.time) {
           toast.success('Connected to Backend & Database');

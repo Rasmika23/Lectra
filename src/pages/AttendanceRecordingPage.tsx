@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -74,7 +75,7 @@ export function AttendanceRecordingPage({
   // Auto-scroll to top when error or success message appears
   useScrollToTop(scrollContainerRef, [error, showSuccess]);
 
-  const API_BASE_URL = 'http://localhost:5000';
+  const API_BASE_URL_LOCAL = API_BASE_URL;
 
   // Fetch assigned modules on mount
   useEffect(() => {

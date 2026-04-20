@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
@@ -44,7 +45,7 @@ interface ModuleManagementPageProps {
   onLogout?: () => void;
 }
 
-const API = 'http://localhost:5000';
+const API = API_BASE_URL;
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DURATIONS = ['1', '1.5', '2', '3'];
 
@@ -426,7 +427,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   };
 
   const handleDownloadCV = (userId: number, userName: string) => {
-    const url = `http://localhost:5000/lecturers/${userId}/cv/download`;
+    const url = `${API_BASE_URL}/lecturers/${userId}/cv/download`;
     fetch(url, { headers: authHeaders() })
         .then(res => {
             if (res.ok) return res.blob();

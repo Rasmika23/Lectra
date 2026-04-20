@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
@@ -19,7 +20,7 @@ export function LecturerPortal({ currentUser, onNavigate, onLogout }: LecturerPo
   useEffect(() => {
     if (!lecturerId) return;
     setLoading(true);
-    fetchWithAuth(`http://localhost:5000/lecturers/${lecturerId}/sessions`)
+    fetchWithAuth(`${API_BASE_URL}/lecturers/${lecturerId}/sessions`)
       .then(r => r.json())
       .then(data => {
         setSessions(Array.isArray(data) ? data : []);

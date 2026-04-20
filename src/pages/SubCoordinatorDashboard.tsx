@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
 import { Calendar, Clock, MapPin, AlertCircle, BookOpen } from 'lucide-react';
 import { fetchWithAuth } from '../lib/api';
 
-const API = 'http://localhost:5000';
+const API = API_BASE_URL;
 
 interface SubCoordinatorDashboardProps {
   currentUser: any;

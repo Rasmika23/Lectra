@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
@@ -23,7 +24,7 @@ interface TermsManagementPageProps {
   onLogout?: () => void;
 }
 
-const API = 'http://localhost:5000';
+const API = API_BASE_URL;
 
 export function TermsManagementPage({ currentUser, onNavigate, onLogout }: TermsManagementPageProps) {
   const [terms, setTerms] = useState<Term[]>([]);

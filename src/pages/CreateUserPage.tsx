@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
@@ -35,7 +36,7 @@ export function CreateUserPage({ currentUser, onNavigate, onLogout }: CreateUser
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('http://localhost:5000/users/invite', {
+      const response = await fetch(`${API_BASE_URL}/users/invite`, {
         method: 'POST',
         headers: authHeaders({
           'Content-Type': 'application/json',

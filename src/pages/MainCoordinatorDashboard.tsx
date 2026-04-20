@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
@@ -31,8 +32,8 @@ export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: 
         setIsActivitiesLoading(true);
         
         const [statsRes, activitiesRes] = await Promise.all([
-          fetchWithAuth('http://localhost:5000/dashboard/stats'),
-          fetchWithAuth('http://localhost:5000/audit-log?limit=5')
+          fetchWithAuth(`${API_BASE_URL}/dashboard/stats`),
+          fetchWithAuth(`${API_BASE_URL}/audit-log?limit=5`)
         ]);
 
         if (statsRes.ok) {

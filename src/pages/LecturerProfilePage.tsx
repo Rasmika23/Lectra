@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -51,7 +52,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await fetchWithAuth('http://localhost:5000/lecturer/profile');
+        const response = await fetchWithAuth(`${API_BASE_URL}/lecturer/profile`);
         if (response.ok) {
           const data = await response.json();
           setPhone(data.phone);
@@ -84,7 +85,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
     // If it's a contact update but name changed without email, we don't need OTP
     // This is handled in handleSaveContact
     try {
-      const response = await fetchWithAuth('http://localhost:5000/auth/request-otp', {
+      const response = await fetchWithAuth(`${API_BASE_URL}/auth/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ purpose })
@@ -106,7 +107,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
   const handleVerifyAndUpdate = async (otpCode: string) => {
     try {
       // 1. Verify OTP
-      const verifyRes = await fetchWithAuth('http://localhost:5000/auth/verify-otp', {
+      const verifyRes = await fetchWithAuth(`${API_BASE_URL}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otpCode, purpose: otpPurpose })
@@ -119,7 +120,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
 
       // 2. Perform Update based on purpose
       if (otpPurpose === 'EMAIL_CHANGE') {
-        const response = await fetchWithAuth('http://localhost:5000/user/profile', {
+        const response = await fetchWithAuth(`${API_BASE_URL}/user/profile`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: tempData.name, email: tempData.email, otpCode })
@@ -136,7 +137,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
            throw new Error(err.error || 'Failed to update user profile');
         }
       } else if (otpPurpose === 'BANK_DETAILS_CHANGE') {
-        const response = await fetchWithAuth('http://localhost:5000/lecturer/profile', {
+        const response = await fetchWithAuth(`${API_BASE_URL}/lecturer/profile`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bankDetails: tempData.bankDetails, otpCode })
@@ -159,7 +160,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
   };
 
   const saveLecturerProfile = async (data: any) => {
-    const response = await fetchWithAuth('http://localhost:5000/lecturer/profile', {
+    const response = await fetchWithAuth(`${API_BASE_URL}/lecturer/profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -184,7 +185,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
       if (cvFile) {
         const formData = new FormData();
         formData.append('cv', cvFile);
-        const cvResponse = await fetchWithAuth('http://localhost:5000/lecturer/profile/cv', {
+        const cvResponse = await fetchWithAuth(`${API_BASE_URL}/lecturer/profile/cv`, {
           method: 'POST',
           body: formData,
         });
@@ -210,7 +211,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
       } else {
         // Just name or other contact info
         if (isNameChanged) {
-            await fetchWithAuth('http://localhost:5000/user/profile', {
+            await fetchWithAuth(`${API_BASE_URL}/user/profile`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
@@ -249,7 +250,7 @@ export function LecturerProfilePage({ currentUser, onNavigate, onLogout, onUserU
     }
 
     try {
-      const response = await fetchWithAuth('http://localhost:5000/lecturer/profile/cv', {
+      const response = await fetchWithAuth(`${API_BASE_URL}/lecturer/profile/cv`, {
         method: 'DELETE',
       });
 

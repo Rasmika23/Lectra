@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -31,7 +32,7 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
   useEffect(() => {
     const fetchTerms = async () => {
       try {
-        const res = await fetchWithAuth('http://localhost:5000/terms');
+        const res = await fetchWithAuth(`${API_BASE_URL}/terms`);
         if (res.ok) setTerms(await res.json());
       } catch (err) {
         toast.error('Failed to load terms');
@@ -64,7 +65,7 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
     setIsSubmitting(true);
     
     try {
-      const response = await fetchWithAuth('http://localhost:5000/modules', {
+      const response = await fetchWithAuth(`${API_BASE_URL}/modules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

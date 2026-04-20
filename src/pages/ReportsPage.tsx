@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
@@ -40,8 +41,8 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
   const fetchFilters = async () => {
     try {
       const [modulesRes, usersRes] = await Promise.all([
-        fetchWithAuth('http://localhost:5000/modules'),
-        fetchWithAuth('http://localhost:5000/users')
+        fetchWithAuth(`${API_BASE_URL}/modules`),
+        fetchWithAuth(`${API_BASE_URL}/users`)
       ]);
       
       const modulesData = await modulesRes.json();
@@ -109,7 +110,7 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
         endDate
       });
       
-      const res = await fetchWithAuth(`http://localhost:5000/reports/data?${queryParams.toString()}`);
+      const res = await fetchWithAuth(`${API_BASE_URL}/reports/data?${queryParams.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch preview data');
       
       const data = await res.json();
@@ -138,7 +139,7 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
         format
       });
       
-      const res = await fetchWithAuth(`http://localhost:5000/reports/export?${queryParams.toString()}`);
+      const res = await fetchWithAuth(`${API_BASE_URL}/reports/export?${queryParams.toString()}`);
       
       // If response is JSON, it might be an error even with 200 status (unlikely but safe to check)
       const contentType = res.headers.get('content-type');

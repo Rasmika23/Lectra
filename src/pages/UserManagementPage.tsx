@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
@@ -35,7 +36,7 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
 
     const fetchUsers = async () => {
         try {
-            const response = await fetch('http://localhost:5000/users', { headers: authHeaders() });
+            const response = await fetch(`${API_BASE_URL}/users`, { headers: authHeaders() });
             if (response.ok) {
                 const data = await response.json();
                 setUsers(data);
@@ -54,7 +55,7 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
 
         setIsDeleting(id);
         try {
-            const response = await fetch(`http://localhost:5000/users/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/users/${id}`, {
                 method: 'DELETE',
                 headers: authHeaders(),
             });
@@ -74,7 +75,7 @@ export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserMa
     };
 
     const handleDownloadCV = (userId: string, userName: string) => {
-        const url = `http://localhost:5000/lecturers/${userId}/cv/download`;
+        const url = `${API_BASE_URL}/lecturers/${userId}/cv/download`;
         fetch(url, { headers: authHeaders() })
             .then(res => {
                 if (res.ok) return res.blob();
