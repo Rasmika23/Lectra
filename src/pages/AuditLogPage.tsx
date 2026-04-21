@@ -33,9 +33,15 @@ export function AuditLogPage() {
       setLoading(true);
       const res = await fetchWithAuth(`${API_BASE_URL}/audit-log`);
       const data = await res.json();
-      setLogs(data);
+      if (Array.isArray(data)) {
+        setLogs(data);
+      } else {
+        console.error('Audit logs data is not an array:', data);
+        setLogs([]);
+      }
     } catch (error) {
       console.error('Error fetching audit logs:', error);
+      setLogs([]);
     } finally {
       setLoading(false);
     }
@@ -45,9 +51,9 @@ export function AuditLogPage() {
     setExpandedLogId(expandedLogId === id ? null : id);
   };
 
-  const actionTypes = ['All', ...Array.from(new Set(logs.map(l => l.action_type)))].sort();
+  const actionTypes = ['All', ...Array.from(new Set(Array.isArray(logs) ? logs.map(l => l.action_type) : []))].sort();
 
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = Array.isArray(logs) ? logs.filter(log => {
     const matchesSearch = 
       (log.user_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (log.user_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,7 +63,18 @@ export function AuditLogPage() {
     const matchesAction = filterAction === 'All' || log.action_type === filterAction;
     
     return matchesSearch && matchesAction;
-  });
+  }) : [];
+
+  const safeFormatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'Invalid Date';
+      return format(d, 'MMM dd, HH:mm:ss');
+    } catch (e) {
+      return 'Invalid Date';
+    }
+  };
 
   const getActionBadgeColor = (action: string) => {
     if (action.includes('DELETE')) return 'bg-red-100 text-red-700';
@@ -128,7 +145,7 @@ export function AuditLogPage() {
                       <td className="p-[var(--space-md)] whitespace-nowrap">
                         <div className="flex items-center gap-2 text-[var(--font-size-small)]">
                           <Clock className="w-4 h-4 text-gray-400" />
-                          <span>{format(new Date(log.created_at), 'MMM dd, HH:mm:ss')}</span>
+                          <span>{safeFormatDate(log.created_at)}</span>
                         </div>
                       </td>
                       <td className="p-[var(--space-md)]">

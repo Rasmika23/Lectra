@@ -45,8 +45,19 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
         fetchWithAuth(`${API_BASE_URL}/users`)
       ]);
       
-      const modulesData = await modulesRes.json();
+      let modulesData = await modulesRes.json();
       const usersData = await usersRes.json();
+      
+      // Filter modules for sub-coordinators and lecturers
+      if (currentUser.role !== 'main-coordinator') {
+        const currentUserId = Number(currentUser.userid ?? currentUser.id);
+        modulesData = modulesData.filter((m: any) => {
+          const currentUserId = Number(currentUser.userid ?? currentUser.id);
+          const isCoordinator = m.subcoordinatorid && Number(m.subcoordinatorid) === currentUserId;
+          const isLecturer = (m.lecturers || []).some((l: any) => Number(l.id || l.userid) === currentUserId);
+          return isCoordinator || isLecturer;
+        });
+      }
       
       setModules(modulesData);
       setLecturers(usersData.filter((u: any) => u.role === 'lecturer'));

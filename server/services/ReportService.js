@@ -18,7 +18,7 @@ class ReportService {
       LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       LEFT JOIN bankdetails bd ON u.userid = bd.lecturerid
       LEFT JOIN banks b ON bd.bankid = b.bankid
-      WHERE r.rolename = 'Lecturer'
+      WHERE r.rolename = 'lecturer'
     `;
     const params = [];
 
@@ -206,7 +206,7 @@ class ReportService {
       FROM users u
       JOIN roles r ON u.roleid = r.roleid
       LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
-      WHERE r.rolename = 'Lecturer'
+      WHERE r.rolename = 'lecturer'
     `;
     const params = [];
 

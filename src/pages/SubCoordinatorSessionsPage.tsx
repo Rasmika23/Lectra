@@ -71,7 +71,12 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
       if (!res.ok) throw new Error('Failed to fetch modules');
       const data: Module[] = await res.json();
       // Filter only modules assigned to this Sub-Coordinator
-      const assigned = data.filter((m: any) => m.subcoordinatorid === (currentUser.userid ?? currentUser.id));
+      const currentUserId = Number(currentUser.userid ?? currentUser.id);
+      const assigned = data.filter((m: any) => {
+        const isCoordinator = m.subcoordinatorid && Number(m.subcoordinatorid) === currentUserId;
+        const isLecturer = (m.lecturers || []).some((l: any) => Number(l.id || l.userid) === currentUserId);
+        return isCoordinator || isLecturer;
+      });
       setModules(assigned);
     } catch (err) {
       console.error(err);

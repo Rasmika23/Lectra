@@ -99,7 +99,17 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
     setEditingTermId(term.termid);
     setEditYear(term.academicyear);
     setEditSemester(term.semester);
-    setEditEndDate(term.semesterenddate ? term.semesterenddate.split('T')[0] : '');
+    
+    // Safely handle date splitting for the edit form
+    let dateStr = '';
+    if (term.semesterenddate) {
+      if (typeof term.semesterenddate === 'string') {
+        dateStr = term.semesterenddate.split('T')[0];
+      } else if (term.semesterenddate instanceof Date) {
+        dateStr = term.semesterenddate.toISOString().split('T')[0];
+      }
+    }
+    setEditEndDate(dateStr);
   };
 
   const handleCancelEdit = () => {
@@ -163,6 +173,8 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
     { value: '2', label: 'Semester 2' }
   ];
 
+  const today = new Date().toISOString().split('T')[0];
+
   return (
     <div ref={scrollRef} className="flex-1 p-[var(--space-xl)] overflow-x-hidden">
       <div className="max-w-4xl mx-auto space-y-[var(--space-xl)]">
@@ -222,6 +234,7 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all"
                     value={newEndDate}
                     onChange={(e) => setNewEndDate(e.target.value)}
+                    min={today}
                     required
                   />
                 </div>
@@ -297,6 +310,7 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
                               value={editEndDate}
                               onChange={(e) => setEditEndDate(e.target.value)}
+                              min={today}
                             />
                           ) : (
                             <span className="text-[var(--color-text-secondary)] flex items-center gap-2">
