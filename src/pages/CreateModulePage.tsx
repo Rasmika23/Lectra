@@ -55,10 +55,10 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
     e.preventDefault();
     setCodeError('');
     
-    // Validate module code format (example: COSC 2202)
-    const codePattern = /^[A-Z]{3,4}\s\d{4}$/;
+    // Validate module code format (e.g., COSC 2202 or ABCDS 12345)
+    const codePattern = /^[A-Z]{3,5}\s\d{3,5}$/;
     if (!codePattern.test(moduleCode)) {
-      setCodeError('Module code must be in format: COSC 2202 (3-4 letters, space, 4 digits)');
+      setCodeError('Module code must be in format: [LETTERS] [NUMBERS] (e.g., ABCDS 12345)');
       return;
     }
     
@@ -160,13 +160,13 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
                   <Input
                     label="Module Code"
                     type="text"
-                    placeholder="e.g., COSC 2202"
+                    placeholder="e.g., ABCDS 12345"
                     value={moduleCode}
                     onChange={(e) => setModuleCode(e.target.value.toUpperCase())}
                     required
                     fullWidth
                     error={codeError}
-                    helperText={!codeError ? "Format: 3-4 letters, space, 4 digits" : undefined}
+                    helperText={!codeError ? "Format: Letters, space, and numbers (e.g., ABCDS 12345)" : undefined}
                   />
                   
                   <Select
@@ -232,16 +232,16 @@ export function CreateModulePage({ currentUser, onNavigate, onLogout }: CreateMo
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-[var(--space-md)] text-[var(--font-size-small)]">
                 <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded">
+                  <code className="font-mono text-[var(--color-primary)]">ABCDS 12345</code>
+                  <p className="text-[var(--color-text-secondary)] mt-1">Example Code</p>
+                </div>
+                <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded">
                   <code className="font-mono text-[var(--color-primary)]">COSC 2202</code>
                   <p className="text-[var(--color-text-secondary)] mt-1">Computer Science</p>
                 </div>
                 <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded">
                   <code className="font-mono text-[var(--color-primary)]">MATH 3101</code>
                   <p className="text-[var(--color-text-secondary)] mt-1">Mathematics</p>
-                </div>
-                <div className="p-[var(--space-md)] bg-[var(--color-bg-main)] rounded">
-                  <code className="font-mono text-[var(--color-primary)]">PHYS 2205</code>
-                  <p className="text-[var(--color-text-secondary)] mt-1">Physics</p>
                 </div>
               </div>
             </Card>

@@ -1,3 +1,8 @@
+/**
+ * @file Header.tsx
+ * @description Application top navigation bar containing the logo, user profile info, and logout action.
+ */
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, UserCircle, User, LogOut, ChevronDown } from 'lucide-react';
 import logo from '@/assets/lectra_logo.png';

@@ -1,3 +1,9 @@
+/**
+ * @file App.tsx
+ * @description Root component of the Lectra frontend. 
+ * Manages authentication state, routing (via state), and global layout.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from './config';
 import { authHeaders } from './lib/api';
@@ -43,6 +49,9 @@ type Page =
   | 'reports';
 
 export default function App() {
+  // ── STATE ─────────────────────────────────────────────────────────────────
+
+  // Currently logged in user (restored from localStorage)
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const savedUser = localStorage.getItem('currentUser');
     const token = localStorage.getItem('jwtToken');
@@ -84,6 +93,8 @@ export default function App() {
     return savedParams ? JSON.parse(savedParams) : null;
   });
 
+  // ── EFFECTS ───────────────────────────────────────────────────────────────
+
   useEffect(() => {
     // Check for setup account URL
     if (window.location.pathname === '/setup-account') {
@@ -116,6 +127,8 @@ export default function App() {
     window.addEventListener('auth-failure', handleAuthFailure);
     return () => window.removeEventListener('auth-failure', handleAuthFailure);
   }, []);
+
+  // ── HANDLERS ─────────────────────────────────────────────────────────────
 
   const handleLogin = (user: any, token?: string) => {
     if (user) {
@@ -171,7 +184,9 @@ export default function App() {
     localStorage.setItem('currentUser', JSON.stringify(updatedUser));
   };
 
-  // Render appropriate page
+  // ── RENDERING ────────────────────────────────────────────────────────────
+
+  // Render appropriate page based on state
   const renderPage = () => {
     if (!currentUser && currentPage !== 'login' && currentPage !== 'setup-account') {
       return <LoginPage onLogin={handleLogin} />;
@@ -203,7 +218,17 @@ export default function App() {
         return <TermsManagementPage currentUser={currentUser} onNavigate={handleNavigate} onLogout={handleLogout} />;
 
       case 'sub-sessions':
-        return <SubCoordinatorSessionsPage currentUser={currentUser} onNavigate={handleNavigate} />;
+        return (
+          <SubCoordinatorSessionsPage 
+            currentUser={currentUser} 
+            onNavigate={handleNavigate} 
+            navigationParams={navigationParams}
+            clearNavigationParams={() => {
+              setNavigationParams(null);
+              localStorage.removeItem('navigationParams');
+            }}
+          />
+        );
 
       case 'attendance':
         return (

@@ -1,3 +1,8 @@
+/**
+ * @file AuditService.js
+ * @description Service for recording user activity logs in the database.
+ */
+
 const db = require('../db');
 
 /**

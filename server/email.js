@@ -1,20 +1,43 @@
+/**
+ * @file email.js
+ * @description Email service using Nodemailer for system notifications and user invitations.
+ */
+
 const nodemailer = require('nodemailer');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 465,
-  secure: true, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// SMTP transporter instance (lazily initialized)
+let transporter;
 
+/**
+ * Gets the email transporter, initializing it if necessary.
+ * @returns {import('nodemailer').Transporter}
+ */
+function getTransporter() {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: process.env.SMTP_PORT || 465,
+      secure: true, // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+  return transporter;
+}
+
+/**
+ * Sends an invitation email to a new user with a setup link.
+ * @param {string} email - Recipient's email address.
+ * @param {string} inviteLink - URL for account setup.
+ * @returns {Promise<{success: boolean, data?: any, error?: any}>}
+ */
 async function sendInviteEmail(email, inviteLink) {
   try {
-    const info = await transporter.sendMail({
+    const info = await getTransporter().sendMail({
       from: process.env.SMTP_FROM_EMAIL || '"Lectra" <noreply@lectra.com>',
       to: email,
       subject: 'Welcome to Lectra - Setup your Account',
@@ -36,9 +59,17 @@ async function sendInviteEmail(email, inviteLink) {
   }
 }
 
+/**
+ * Generic function to send formatted emails.
+ * @param {string} to - Recipient email.
+ * @param {string} subject - Email subject.
+ * @param {string} textContent - Plain text fallback.
+ * @param {string} htmlContent - Rich HTML content.
+ * @returns {Promise<{success: boolean, data?: any, error?: any}>}
+ */
 async function sendMail(to, subject, textContent, htmlContent) {
   try {
-    const info = await transporter.sendMail({
+    const info = await getTransporter().sendMail({
       from: process.env.SMTP_FROM_EMAIL || '"Lectra" <noreply@lectra.com>',
       to: to,
       subject: subject,
@@ -53,4 +84,13 @@ async function sendMail(to, subject, textContent, htmlContent) {
   }
 }
 
-module.exports = { sendInviteEmail, sendMail };
+module.exports = { 
+  sendInviteEmail, 
+  sendMail,
+  /**
+   * Sets a custom transporter instance (used for testing).
+   * @param {Object} customTransporter - The transporter to use.
+   */
+  setTransporter: (customTransporter) => { transporter = customTransporter; }
+};
+

@@ -5,6 +5,7 @@ import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
+import { DatePicker } from '../components/DatePicker';
 import { Download, FileText, Calendar, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import { fetchWithAuth } from '../lib/api';
 
@@ -270,20 +271,18 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                       fullWidth
                     />
                     
-                    <Input
+                    <DatePicker
                       label="Start Date"
-                      type="date"
                       value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
+                      onChange={setStartDate}
                       fullWidth
                       disabled={isDateDisabled}
                     />
                     
-                    <Input
+                    <DatePicker
                       label="End Date"
-                      type="date"
                       value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
+                      onChange={setEndDate}
                       fullWidth
                       disabled={isDateDisabled}
                     />

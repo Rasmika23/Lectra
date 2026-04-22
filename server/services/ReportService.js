@@ -1,10 +1,26 @@
+/**
+ * @file ReportService.js
+ * @description Service for generating various system reports (Attendance, Topics, Bank Details, etc.) in Excel and PDF formats.
+ */
+
 const db = require('../db');
 const ExcelJS = require('exceljs');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
 
+/**
+ * ReportService provides methods to fetch report data and export it to different formats.
+ */
 class ReportService {
+  constructor(database) {
+    this.db = database || db;
+  }
+  /**
+   * Fetches bank details for lecturers based on provided filters.
+   * @param {Object} filters - Filter criteria (moduleId, lecturerId).
+   * @returns {Promise<Array>} List of bank detail records.
+   */
   async getBankDetailsReport(filters) {
     const { moduleId, lecturerId } = filters;
     let query = `
@@ -32,10 +48,15 @@ class ReportService {
       params.push(parseInt(moduleId));
     }
 
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Generates an attendance report based on module, lecturer, and date range filters.
+   * @param {Object} filters - Filter criteria (moduleId, lecturerId, startDate, endDate).
+   * @returns {Promise<Array>} List of attendance records.
+   */
   async getAttendanceReport(filters) {
     const { moduleId, lecturerId, startDate, endDate } = filters;
     let query = `
@@ -82,10 +103,15 @@ class ReportService {
     }
 
     query += ` ORDER BY s.datetime DESC`;
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Fetches topics covered in sessions based on filters.
+   * @param {Object} filters - Filter criteria.
+   * @returns {Promise<Array>} Topic coverage records.
+   */
   async getTopicsReport(filters) {
     const { moduleId, lecturerId, startDate, endDate } = filters;
     let query = `
@@ -126,10 +152,15 @@ class ReportService {
     }
 
     query += ` ORDER BY s.datetime DESC`;
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Fetches data for rescheduled sessions.
+   * @param {Object} filters - Filter criteria.
+   * @returns {Promise<Array>} Reschedule records.
+   */
   async getRescheduleReport(filters) {
     const { moduleId, lecturerId, startDate, endDate } = filters;
     let query = `
@@ -170,10 +201,15 @@ class ReportService {
     }
 
     query += ` ORDER BY s.datetime DESC`;
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Fetches the weekly schedule for a module.
+   * @param {Object} filters - Filter criteria (moduleId).
+   * @returns {Promise<Array>} Weekly schedule slots.
+   */
   async getWeeklyScheduleReport(filters) {
     const { moduleId } = filters;
     let query = `
@@ -188,10 +224,15 @@ class ReportService {
     `;
     const params = [];
 
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Fetches a list of visiting lecturers and their assigned modules.
+   * @param {Object} filters - Filter criteria.
+   * @returns {Promise<Array>} Lecturer details.
+   */
   async getVisitingLecturersReport(filters) {
     const { moduleId, lecturerId } = filters;
     let query = `
@@ -221,10 +262,15 @@ class ReportService {
     }
 
     query += ` ORDER BY u.name ASC`;
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Fetches a summary report of modules and assigned staff.
+   * @param {Object} filters - Filter criteria (moduleId).
+   * @returns {Promise<Array>} Module summary records.
+   */
   async getModulesReport(filters) {
     const { moduleId } = filters;
     let query = `
@@ -250,10 +296,16 @@ class ReportService {
     }
 
     query += ` ORDER BY t.academicyear DESC, t.semester DESC, m.modulecode ASC`;
-    const result = await db.query(query, params);
+    const result = await this.db.query(query, params);
     return result.rows;
   }
 
+  /**
+   * Exports data to an Excel buffer.
+   * @param {Array} data - The rows to export.
+   * @param {string} type - The report type (for summary calculation).
+   * @returns {Promise<Buffer>} Excel file buffer.
+   */
   async exportToExcel(data, type) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Report');
@@ -360,6 +412,13 @@ class ReportService {
     return await workbook.xlsx.writeBuffer();
   }
 
+  /**
+   * Exports data to a PDF buffer using Puppeteer.
+   * @param {Array} data - The report data.
+   * @param {string} type - The report type.
+   * @param {string} title - The title of the PDF report.
+   * @returns {Promise<Buffer>} PDF file buffer.
+   */
   async exportToPDF(data, type, title) {
     const browser = await puppeteer.launch({ headless: 'new' });
     const page = await browser.newPage();

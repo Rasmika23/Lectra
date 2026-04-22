@@ -10,6 +10,7 @@ import { Calendar, Clock, MapPin, Video, Users, Plus, X, BookOpen, Bell, Check, 
 import { toast } from 'sonner';
 import { authHeaders, fetchWithAuth } from '../lib/api';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
+import { DatePicker } from '../components/DatePicker';
 
 const API = API_BASE_URL;
 
@@ -32,7 +33,17 @@ interface Session {
   reminder_sent?: boolean;
 }
 
-export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { currentUser: any, onNavigate: (page: string, params?: any) => void }) {
+export function SubCoordinatorSessionsPage({ 
+  currentUser, 
+  onNavigate,
+  navigationParams,
+  clearNavigationParams
+}: { 
+  currentUser: any, 
+  onNavigate: (page: string, params?: any) => void,
+  navigationParams?: { moduleId?: string; sessionId?: string } | null,
+  clearNavigationParams?: () => void
+}) {
   const [modules, setModules] = useState<Module[]>([]);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -55,6 +66,20 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
   useEffect(() => {
     fetchModules();
   }, []);
+
+  // Handle initial navigation params
+  useEffect(() => {
+    if (navigationParams && navigationParams.moduleId && modules.length > 0) {
+      const module = modules.find(m => m.moduleid.toString() === navigationParams.moduleId?.toString());
+      if (module) {
+        setSelectedModule(module);
+        // Clear params after they've been applied
+        if (clearNavigationParams) {
+          clearNavigationParams();
+        }
+      }
+    }
+  }, [navigationParams, modules, clearNavigationParams]);
 
   useEffect(() => {
     if (selectedModule) {
@@ -276,7 +301,13 @@ export function SubCoordinatorSessionsPage({ currentUser, onNavigate }: { curren
                   </div>
                   <form onSubmit={handleAddSession} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <Input label="Date" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required variant="premium" />
+                      <DatePicker 
+                        label="Date" 
+                        value={newDate} 
+                        onChange={setNewDate} 
+                        required 
+                        variant="premium" 
+                      />
                       <AnalogTimePicker label="Time" value={newTime} onChange={setNewTime} />
                     </div>
                     <Select label="Mode" options={[{value: 'Physical', label: 'Physical'}, {value: 'Online', label: 'Online'}]} value={newMode} onChange={e => setNewMode(e.target.value)} variant="premium" />

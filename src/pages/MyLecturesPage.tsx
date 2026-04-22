@@ -9,6 +9,7 @@ import { authHeaders, fetchWithAuth } from '../lib/api';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
+import { DatePicker } from '../components/DatePicker';
 import { toast } from 'sonner';
 
 const API = API_BASE_URL;
@@ -647,7 +648,13 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
                   </div>
                   <form onSubmit={handleAddSession} className="space-y-5">
                     <div className="grid grid-cols-2 gap-4">
-                      <Input label="Date" type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required variant="premium" />
+                      <DatePicker 
+                        label="Date" 
+                        value={newDate} 
+                        onChange={setNewDate} 
+                        required 
+                        variant="premium" 
+                      />
                       <AnalogTimePicker label="Time" value={newTime} onChange={setNewTime} />
                     </div>
                     <Select 

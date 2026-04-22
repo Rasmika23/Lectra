@@ -10,11 +10,20 @@ class WhatsAppService {
   async initialize() {
     this.client = new Client({
       authStrategy: new LocalAuth({ clientId: "lectra-server" }),
+      webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-js/main/dist/wppconnect-wa.js',
+      },
       puppeteer: {
-          headless: true,
+          headless: true, // Use standard headless
           args: [
             '--no-sandbox',
-            '--disable-setuid-sandbox'
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
           ]
       }
     });
@@ -36,6 +45,21 @@ class WhatsAppService {
     });
 
     this.client.initialize();
+  }
+
+  /**
+   * Gracefully close the WhatsApp connection and Chromium browser
+   */
+  async destroy() {
+    if (this.client) {
+      try {
+        console.log('Closing WhatsApp connection...');
+        await this.client.destroy();
+        this.connectionState = 'close';
+      } catch (err) {
+        console.error('Error during WhatsApp logout:', err);
+      }
+    }
   }
 
   /**

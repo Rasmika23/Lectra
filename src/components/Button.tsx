@@ -1,3 +1,8 @@
+/**
+ * @file Button.tsx
+ * @description Customizable button component with multiple variants, sizes, and loading states.
+ */
+
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

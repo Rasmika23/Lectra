@@ -1,3 +1,9 @@
+/**
+ * @file index.js
+ * @description Main entry point for the Lectra backend server.
+ * Handles routing, authentication, and integration with various services.
+ */
+
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -12,7 +18,14 @@ const reportService = require('./services/ReportService');
 const auditLog = require('./services/AuditService');
 const { sendInviteEmail, sendMail } = require('./email');
 
-// ── JWT Auth Middleware ─────────────────────────────────────────────────────
+// ── MIDDLEWARE ─────────────────────────────────────────────────────────────
+
+/**
+ * Middleware to authenticate requests using JWT.
+ * @param {express.Request} req 
+ * @param {express.Response} res 
+ * @param {express.NextFunction} next 
+ */
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
@@ -25,6 +38,13 @@ function authenticateToken(req, res, next) {
 }
 
 // ── OTP Helper ─────────────────────────────────────────────────────────────
+/**
+ * Utility to generate a 6-digit OTP, save it to the DB, and email it to the user.
+ * @param {number} userId 
+ * @param {string} email 
+ * @param {string} purpose - Descriptive slug (e.g., 'PASSWORD_CHANGE')
+ * @returns {Promise<string>} The generated OTP code.
+ */
 async function generateAndSendOTP(userId, email, purpose) {
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60000); // 10 mins
@@ -52,6 +72,12 @@ async function generateAndSendOTP(userId, email, purpose) {
 }
 
 // ── Notification Helper for Sub-Coordinators ────────────────────────────────
+/**
+ * Sends a notification (Email + WhatsApp) to the assigned sub-coordinator of a module.
+ * @param {number} moduleId 
+ * @param {string} subject 
+ * @param {string} message 
+ */
 async function notifySubCoordinator(moduleId, subject, message) {
   try {
     const moduleRes = await db.query(`
@@ -140,7 +166,9 @@ const cvStorage = multer.diskStorage({
 const cvUpload = multer({ storage: cvStorage });
 
 // Login endpoint
-// Login endpoint
+// ── AUTHENTICATION ROUTES ─────────────────────────────────────────────────
+
+// POST /login - Authenticate user and return JWT
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -186,7 +214,7 @@ app.post('/login', async (req, res) => {
 
       // Generate JWT Token
       const token = jwt.sign(
-        { id: user.userid, email: user.email, role: frontendRole },
+        { id: user.userid, name: user.name, email: user.email, role: frontendRole },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -207,6 +235,7 @@ app.post('/login', async (req, res) => {
 // Invite User Endpoint
 const { v4: uuidv4 } = require('uuid');
 
+// POST /users/invite - Create pending user and send invitation link
 app.post('/users/invite', async (req, res) => {
   const { email, role } = req.body;
 
@@ -252,6 +281,7 @@ app.post('/users/invite', async (req, res) => {
 });
 
 // Setup Account Endpoint
+// POST /users/setup - Finalize account setup (name/password) from invitation
 app.post('/users/setup', async (req, res) => {
   const { email, name, password } = req.body;
 
@@ -289,7 +319,7 @@ app.post('/users/setup', async (req, res) => {
       };
 
       const token = jwt.sign(
-        { id: user.userid, email: user.email, role: frontendRole },
+        { id: user.userid, name: user.name, email: user.email, role: frontendRole },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -310,6 +340,9 @@ app.post('/users/setup', async (req, res) => {
 // --- Auth & Profile Management Endpoints ---
 
 // Request OTP endpoint
+// ── PROFILE MANAGEMENT ─────────────────────────────────────────────────────
+
+// POST /auth/request-otp - Send OTP to user's registered email
 app.post('/auth/request-otp', authenticateToken, async (req, res) => {
   const { purpose } = req.body;
   if (!purpose) return res.status(400).json({ error: 'Purpose is required' });
@@ -327,6 +360,7 @@ app.post('/auth/request-otp', authenticateToken, async (req, res) => {
 });
 
 // Verify OTP endpoint
+// POST /auth/verify-otp - Validate OTP code for sensitive actions
 app.post('/auth/verify-otp', authenticateToken, async (req, res) => {
   const { otpCode, purpose } = req.body;
   if (!otpCode || !purpose) return res.status(400).json({ error: 'OTP code and purpose are required' });
@@ -351,6 +385,7 @@ app.post('/auth/verify-otp', authenticateToken, async (req, res) => {
 });
 
 // Update core user profile (Name, Email, Password)
+// PATCH /user/profile - Update user's name, email, or password (requires OTP)
 app.patch('/user/profile', authenticateToken, async (req, res) => {
   const { name, email, phone, currentPassword, newPassword, otpCode } = req.body;
   const userId = parseInt(req.user.id);
@@ -430,6 +465,9 @@ app.patch('/user/profile', authenticateToken, async (req, res) => {
 // --- Users Management Endpoints ---
 
 // Get all users
+// ── USER MANAGEMENT ────────────────────────────────────────────────────────
+
+// GET /users - Fetch all users with their assigned modules
 app.get('/users', authenticateToken, async (req, res) => {
   if (req.user.role !== 'main-coordinator' && req.user.role !== 'sub-coordinator') return res.status(403).json({ error: 'Access denied' });
   try {
@@ -1112,14 +1150,12 @@ app.get('/', (req, res) => {
   res.send('Lectra API is running');
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// MODULE SCHEDULE (weekly recurring slots → auto-generate sessions)
-// ══════════════════════════════════════════════════════════════════════════════
+// ── MODULE SCHEDULES & SESSIONS ──────────────────────────────────────────
 
 /**
- * Generate/regenerate future sessions for a module from its schedule slots.
- * - Deletes sessions WHERE scheduleddate >= TODAY
- * - Creates one session per week per slot until semesterenddate
+ * Automatically generate/regenerate future sessions for a module from its recurring schedule slots.
+ * This function persists sessions from the current date until the semester end date.
+ * @param {number} moduleId 
  */
 async function generateSessionsForModule(moduleId) {
   const today = new Date();
@@ -1174,7 +1210,7 @@ async function generateSessionsForModule(moduleId) {
   }
 }
 
-// GET /modules/:id/schedule — get all schedule slots
+// GET /modules/:id/schedule - Retrieve recurring slots and term end date for a module
 app.get('/modules/:id/schedule', async (req, res) => {
   const { id } = req.params;
   try {
@@ -1267,7 +1303,9 @@ app.put('/modules/:id/semesterenddate', async (req, res) => {
   }
 });
 
-// Get all modules with assignments
+// ── MODULE CORE ────────────────────────────────────────────────────────────
+
+// GET /modules - Fetch all modules with their assignments and term details
 app.get('/modules', authenticateToken, async (req, res) => {
   try {
     const query = `
@@ -1304,11 +1342,9 @@ app.get('/modules', authenticateToken, async (req, res) => {
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// TERM MANAGEMENT
-// ══════════════════════════════════════════════════════════════════════════════
+// ── ACADEMIC TERMS ─────────────────────────────────────────────────────────
 
-// Get all terms
+// GET /terms - List all defined academic terms
 app.get('/terms', authenticateToken, async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM academic_terms ORDER BY academicyear DESC, semester DESC');
@@ -1559,8 +1595,10 @@ app.delete('/modules/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get dashboard statistics (Main Coordinator)
-app.get('/dashboard/stats', authenticateToken, async (req, res) => {
+// ── DASHBOARD & STATISTICS ────────────────────────────────────────────────
+
+// GET /stats/main - Aggregate metrics for the Main Coordinator dashboard
+app.get('/stats/main', authenticateToken, async (req, res) => {
   if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
   try {
     const activeLecturersQuery = `
@@ -1622,7 +1660,7 @@ app.get('/dashboard/stats', authenticateToken, async (req, res) => {
   }
 });
 
-// Get dashboard statistics (Sub-Coordinator)
+// GET /subcoordinator/dashboard-stats - Detailed metrics for a sub-coordinator's assigned modules
 app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) => {
   if (req.user.role !== 'sub-coordinator') {
     return res.status(403).json({ error: 'Access denied. Sub-coordinators only.' });
@@ -1912,9 +1950,8 @@ app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
     const { modulename, modulecode } = moduleCheck.rows[0];
 
     const query = `
-      SELECT u.userid, u.name, u.email, lp.phonenumber
+      SELECT u.userid, u.name, u.email, u.phonenumber
       FROM users u
-      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       WHERE u.userid = ANY($1::int[])
     `;
     const lecturersRes = await db.query(query, [lecturerIds]);
@@ -1935,7 +1972,7 @@ app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
       }
       if (lecturer.phonenumber) {
         try {
-            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\nDear ${lecturer.name},\n\n${messageText}\n\n_Lectra VLMS_`;
+            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\n${messageText}\n\n_Lectra VLMS_`;
             const waSuccess = await whatsappService.sendMessage(lecturer.phonenumber, formattedMessage);
             if (waSuccess) waCount++;
             else errors.push(`WhatsApp to ${lecturer.name} failed (Service error).`);
@@ -2117,9 +2154,9 @@ app.delete('/modules/:id/timetable', authenticateToken, async (req, res) => {
   }
 });
 
-// --- Attendance & Session Details Endpoints ---
+// ── ATTENDANCE & SESSION DETAILS ──────────────────────────────────────────
 
-// Get modules assigned to the logged-in sub-coordinator
+// GET /subcoordinator/modules - List modules assigned/accessible to the sub-coordinator
 app.get('/subcoordinator/modules', authenticateToken, async (req, res) => {
   if (req.user.role !== 'sub-coordinator') {
     return res.status(403).json({ error: 'Access denied. Sub-coordinators only.' });
@@ -2280,8 +2317,9 @@ app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
   }
 });
 
-// --- Audit Log Endpoint ---
+// ── AUDIT LOGS ────────────────────────────────────────────────────────────
 
+// GET /audit-log - Retrieve system-wide activity logs
 app.get('/audit-log', authenticateToken, async (req, res) => {
   if (req.user.role !== 'main-coordinator') {
     return res.status(403).json({ error: 'Access denied. Main Coordinator only.' });
@@ -2314,9 +2352,9 @@ app.get('/audit-log', authenticateToken, async (req, res) => {
   }
 });
 
-// --- Report Endpoints ---
+// ── REPORTS ───────────────────────────────────────────────────────────────
 
-// Get report data for preview
+// GET /reports/data - Fetch raw data for report previews
 app.get('/reports/data', authenticateToken, async (req, res) => {
   const { type, moduleId, lecturerId, startDate, endDate } = req.query;
   const filters = { moduleId, lecturerId, startDate, endDate };
@@ -2434,8 +2472,7 @@ app.get('/test-db', async (req, res) => {
 });
 
 // Manual trigger for reminder scheduler scan (useful for testing)
-app.post('/debug/trigger-reminders', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
+app.post('/debug/trigger-reminders', async (req, res) => {
   try {
     console.log('[DEBUG] Manually triggering reminder scan...');
     await reminderScheduler.checkAndSendReminders();
@@ -2454,3 +2491,13 @@ reminderScheduler.start();
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+
+// ── GRACEFUL SHUTDOWN ────────────────────────────────────────────────────────
+const shutdown = async (signal) => {
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  await whatsappService.destroy();
+  process.exit(0);
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

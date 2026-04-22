@@ -1,3 +1,10 @@
+/**
+ * @file ModuleManagementPage.tsx
+ * @description Complex page for managing module details, staff assignments (coordinators and lecturers),
+ * recurring schedules, automated session generation, and communication.
+ * Accessible to Main Coordinators and Sub-Coordinators with varying permissions.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
@@ -16,6 +23,8 @@ import sampleTimetable from '../assets/Sample Timetable.xlsx?url';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
+
+// ── TYPES & INTERFACES ───────────────────────────────────────────────────────
 
 interface Lecturer { id: number; name: string; email?: string; wants_reminders?: boolean; cvpath?: string; }
 interface Module {
@@ -50,12 +59,14 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const DURATIONS = ['1', '1.5', '2', '3'];
 
 export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: ModuleManagementPageProps) {
+  // ── STATE - DATA ──────────────────────────────────────────────────────────
   const [modules, setModules] = useState<Module[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [terms, setTerms] = useState<any[]>([]);
 
+  // ── STATE - UI & EDIT ─────────────────────────────────────────────────────
   // Edit Module State
   const [isEditingModule, setIsEditingModule] = useState(false);
   const [editModuleCode, setEditModuleCode] = useState('');
@@ -76,7 +87,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAcademicYear, setSelectedAcademicYear] = useState('All Years');
 
-  // Timetable upload
+  // Assignment states
   const [subcoError, setSubcoError] = useState('');
   const [subcoLoading, setSubcoLoading] = useState(false);
   const [selectedSubcoId, setSelectedSubcoId] = useState('');
@@ -101,6 +112,8 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
   const [editSlot, setEditSlot] = useState<any>({});
 
+  // ── PERMISSIONS ───────────────────────────────────────────────────────────
+
   const userRole = (currentUser?.role || '').toLowerCase();
   const isMainCoordinator = userRole === 'main-coordinator';
   const isSubCoordinator = userRole === 'sub-coordinator';
@@ -124,6 +137,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
 
   const selectClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all";
 
+  // ── EFFECTS & INITIAL LOAD ────────────────────────────────────────────────
   const fetchData = async () => {
     // 1. Fetch Modules (Critical)
     try {
@@ -230,6 +244,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     }
   };
 
+  // ── HANDLERS - CORE MODULE ────────────────────────────────────────────────
   const handleEditModuleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedModuleId) return;
@@ -488,7 +503,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
       }
   };
 
-  // ── SCHEDULE HELPERS ───────────────────────────────────────────────────────
+  // ── HANDLERS - SCHEDULE & RECURRING SLOTS ─────────────────────────────────
   const handleAddSlot = async () => {
     if (!semesterEndDate) { toast.error('The Main Coordinator must set a semester end date for this term first'); return; }
     setScheduleLoading(true);
@@ -536,9 +551,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     finally { setScheduleLoading(false); }
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MODULE LIST VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── RENDERING - LIST VIEW ─────────────────────────────────────────────────
   if (view === 'list') {
     const filteredModules = modules.filter(m => {
       const matchesSearch = 
@@ -713,9 +726,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MODULE DETAIL VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── RENDERING - DETAIL VIEW ───────────────────────────────────────────────
   if (!module) {
     return (
       <div className="h-full flex items-center justify-center">

@@ -1,3 +1,9 @@
+/**
+ * @file ReminderScheduler.js
+ * @description Background service that manages automated session reminders via Email and WhatsApp.
+ * It uses node-cron to periodically check for upcoming sessions and dispatch notifications.
+ */
+
 const cron = require('node-cron');
 const db = require('../db');
 const { sendInviteEmail } = require('../email'); 
@@ -15,6 +21,13 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+/**
+ * Sends a plain text reminder email.
+ * @param {string} email - Recipient's email.
+ * @param {string} subject - Email subject.
+ * @param {string} textContent - Plain text message.
+ * @returns {Promise<boolean>} Success status.
+ */
 async function sendReminderEmail(email, subject, textContent) {
    try {
     await transporter.sendMail({
@@ -31,11 +44,17 @@ async function sendReminderEmail(email, subject, textContent) {
   }
 }
 
+/**
+ * The ReminderScheduler class manages the lifecycle of automated notifications.
+ */
 class ReminderScheduler {
   constructor() {
     this.task = null;
   }
 
+  /**
+   * Starts the hourly cron job for reminders.
+   */
   start() {
     console.log('Starting ReminderScheduler (runs every hour at minute 0)...');
     
@@ -55,6 +74,10 @@ class ReminderScheduler {
     }
   }
 
+  /**
+   * Main logic that scans the database for sessions needing reminders.
+   * Runs every hour.
+   */
   async checkAndSendReminders() {
     console.log(`[${new Date().toISOString()}] Checking for session reminders...`);
     try {
@@ -103,6 +126,11 @@ class ReminderScheduler {
     }
   }
 
+  /**
+   * Processes reminders for a specific session, notifying assigned lecturers.
+   * @param {Object} session - The session record from DB.
+   * @param {Object} mod - The module record with template and settings.
+   */
   async processSessionReminders(session, mod) {
     try {
         // Find assigned lecturers for this module who want reminders

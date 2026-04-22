@@ -9,6 +9,7 @@ import {
   ArrowLeft, Plus, Calendar, Edit2, Trash2, Check, X
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DatePicker } from '../components/DatePicker';
 import { authHeaders } from '../lib/api';
 
 interface Term {
@@ -225,19 +226,12 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
                   onChange={(e) => setNewSemester(e.target.value)}
                   required
                 />
-                <div>
-                  <label className="block text-[var(--font-size-small)] font-semibold text-[var(--color-text-primary)] mb-[var(--space-xs)]">
-                    Semester End Date
-                  </label>
-                  <input 
-                    type="date" 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all"
-                    value={newEndDate}
-                    onChange={(e) => setNewEndDate(e.target.value)}
-                    min={today}
-                    required
-                  />
-                </div>
+                <DatePicker
+                  label="Semester End Date"
+                  value={newEndDate}
+                  onChange={setNewEndDate}
+                  required
+                />
               </div>
               <div className="flex justify-end pt-[var(--space-md)] border-t border-[#E2E8F0]">
                 <Button type="submit" variant="primary" disabled={isSubmitting}>
@@ -305,12 +299,9 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
                         </td>
                         <td className="p-[var(--space-md)]">
                           {isEditing ? (
-                            <input 
-                              type="date"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
+                            <DatePicker 
                               value={editEndDate}
-                              onChange={(e) => setEditEndDate(e.target.value)}
-                              min={today}
+                              onChange={setEditEndDate}
                             />
                           ) : (
                             <span className="text-[var(--color-text-secondary)] flex items-center gap-2">

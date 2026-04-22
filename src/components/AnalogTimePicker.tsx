@@ -1,5 +1,11 @@
+/**
+ * @file AnalogTimePicker.tsx
+ * @description A custom analog-style time picker component using Radix UI Popover.
+ * Supports hour/minute selection and AM/PM toggling.
+ */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import * as PopoverPrimitive from "@radix-ui/react-popover@1.1.6";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from './ui/utils';
 import { Clock } from 'lucide-react';
 
