@@ -1,3 +1,9 @@
+/**
+ * @file index.js
+ * @description Main entry point for the Lectra backend server.
+ * Handles routing, authentication, and integration with various services.
+ */
+
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -12,7 +18,14 @@ const reportService = require('./services/ReportService');
 const auditLog = require('./services/AuditService');
 const { sendInviteEmail, sendMail } = require('./email');
 
-// ── JWT Auth Middleware ─────────────────────────────────────────────────────
+// ── MIDDLEWARE ─────────────────────────────────────────────────────────────
+
+/**
+ * Middleware to authenticate requests using JWT.
+ * @param {express.Request} req 
+ * @param {express.Response} res 
+ * @param {express.NextFunction} next 
+ */
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
@@ -25,6 +38,13 @@ function authenticateToken(req, res, next) {
 }
 
 // ── OTP Helper ─────────────────────────────────────────────────────────────
+/**
+ * Utility to generate a 6-digit OTP, save it to the DB, and email it to the user.
+ * @param {number} userId 
+ * @param {string} email 
+ * @param {string} purpose - Descriptive slug (e.g., 'PASSWORD_CHANGE')
+ * @returns {Promise<string>} The generated OTP code.
+ */
 async function generateAndSendOTP(userId, email, purpose) {
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60000); // 10 mins
@@ -52,6 +72,12 @@ async function generateAndSendOTP(userId, email, purpose) {
 }
 
 // ── Notification Helper for Sub-Coordinators ────────────────────────────────
+/**
+ * Sends a notification (Email + WhatsApp) to the assigned sub-coordinator of a module.
+ * @param {number} moduleId 
+ * @param {string} subject 
+ * @param {string} message 
+ */
 async function notifySubCoordinator(moduleId, subject, message) {
   try {
     const moduleRes = await db.query(`
@@ -140,7 +166,9 @@ const cvStorage = multer.diskStorage({
 const cvUpload = multer({ storage: cvStorage });
 
 // Login endpoint
-// Login endpoint
+// ── AUTHENTICATION ROUTES ─────────────────────────────────────────────────
+
+// POST /login - Authenticate user and return JWT
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -169,15 +197,16 @@ app.post('/login', async (req, res) => {
       // Lecturer -> lecturer
       // Staff -> staff
       let frontendRole = 'login';
-      const dbRole = user.rolename;
+      const dbRole = user.rolename ? user.rolename.trim() : '';
 
-      if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
-      else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
-      else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
-      else if (dbRole === 'Staff') frontendRole = 'staff';
+      if (dbRole.toLowerCase() === 'main-coordinator') frontendRole = 'main-coordinator';
+      else if (dbRole.toLowerCase() === 'sub-coordinator') frontendRole = 'sub-coordinator';
+      else if (dbRole.toLowerCase() === 'lecturer') frontendRole = 'lecturer';
+      else if (dbRole.toLowerCase() === 'staff') frontendRole = 'staff';
 
       const userResponse = {
         id: user.userid,
+        userid: user.userid,
         name: user.name,
         email: user.email,
         role: frontendRole
@@ -185,7 +214,7 @@ app.post('/login', async (req, res) => {
 
       // Generate JWT Token
       const token = jwt.sign(
-        { id: user.userid, email: user.email, role: frontendRole },
+        { id: user.userid, name: user.name, email: user.email, role: frontendRole },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -206,6 +235,7 @@ app.post('/login', async (req, res) => {
 // Invite User Endpoint
 const { v4: uuidv4 } = require('uuid');
 
+// POST /users/invite - Create pending user and send invitation link
 app.post('/users/invite', async (req, res) => {
   const { email, role } = req.body;
 
@@ -251,6 +281,7 @@ app.post('/users/invite', async (req, res) => {
 });
 
 // Setup Account Endpoint
+// POST /users/setup - Finalize account setup (name/password) from invitation
 app.post('/users/setup', async (req, res) => {
   const { email, name, password } = req.body;
 
@@ -274,10 +305,10 @@ app.post('/users/setup', async (req, res) => {
 
       let frontendRole = 'staff';
       if (roleResult.rows.length > 0) {
-        const dbRole = roleResult.rows[0].rolename;
-        if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
-        else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
-        else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
+        const dbRole = roleResult.rows[0].rolename ? roleResult.rows[0].rolename.trim() : '';
+        if (dbRole.toLowerCase() === 'main-coordinator') frontendRole = 'main-coordinator';
+        else if (dbRole.toLowerCase() === 'sub-coordinator') frontendRole = 'sub-coordinator';
+        else if (dbRole.toLowerCase() === 'lecturer') frontendRole = 'lecturer';
       }
 
       const userResponse = {
@@ -288,7 +319,7 @@ app.post('/users/setup', async (req, res) => {
       };
 
       const token = jwt.sign(
-        { id: user.userid, email: user.email, role: frontendRole },
+        { id: user.userid, name: user.name, email: user.email, role: frontendRole },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -309,6 +340,9 @@ app.post('/users/setup', async (req, res) => {
 // --- Auth & Profile Management Endpoints ---
 
 // Request OTP endpoint
+// ── PROFILE MANAGEMENT ─────────────────────────────────────────────────────
+
+// POST /auth/request-otp - Send OTP to user's registered email
 app.post('/auth/request-otp', authenticateToken, async (req, res) => {
   const { purpose } = req.body;
   if (!purpose) return res.status(400).json({ error: 'Purpose is required' });
@@ -326,6 +360,7 @@ app.post('/auth/request-otp', authenticateToken, async (req, res) => {
 });
 
 // Verify OTP endpoint
+// POST /auth/verify-otp - Validate OTP code for sensitive actions
 app.post('/auth/verify-otp', authenticateToken, async (req, res) => {
   const { otpCode, purpose } = req.body;
   if (!otpCode || !purpose) return res.status(400).json({ error: 'OTP code and purpose are required' });
@@ -350,10 +385,10 @@ app.post('/auth/verify-otp', authenticateToken, async (req, res) => {
 });
 
 // Update core user profile (Name, Email, Password)
+// PATCH /user/profile - Update user's name, email, or password (requires OTP)
 app.patch('/user/profile', authenticateToken, async (req, res) => {
   const { name, email, phone, currentPassword, newPassword, otpCode } = req.body;
-  const userId = req.user.id;
-
+  const userId = parseInt(req.user.id);
   try {
     const userRes = await db.query('SELECT * FROM users WHERE userid = $1', [userId]);
     if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -430,7 +465,11 @@ app.patch('/user/profile', authenticateToken, async (req, res) => {
 // --- Users Management Endpoints ---
 
 // Get all users
+// ── USER MANAGEMENT ────────────────────────────────────────────────────────
+
+// GET /users - Fetch all users with their assigned modules
 app.get('/users', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator' && req.user.role !== 'sub-coordinator') return res.status(403).json({ error: 'Access denied' });
   try {
     const query = `
       SELECT 
@@ -440,9 +479,9 @@ app.get('/users', authenticateToken, async (req, res) => {
         r.rolename,
         lp.cvpath,
         CASE
-          WHEN r.rolename = 'SubCoordinator' THEN
+          WHEN r.rolename = 'sub-coordinator' THEN
             (SELECT string_agg(m.modulecode, ', ') FROM module m WHERE m.subcoordinatorid = u.userid)
-          WHEN r.rolename = 'Lecturer' THEN
+          WHEN r.rolename = 'lecturer' THEN
             (SELECT string_agg(mc.modulecode, ', ') 
              FROM module m 
              JOIN module_catalog mc ON m.modulecode = mc.modulecode
@@ -460,12 +499,12 @@ app.get('/users', authenticateToken, async (req, res) => {
     // Map DB role name to frontend expected role string
     const mappedUsers = result.rows.map(user => {
       let frontendRole = 'staff';
-      const dbRole = user.rolename;
+      const dbRole = user.rolename ? user.rolename.trim() : '';
 
-      if (dbRole === 'MainCoordinator') frontendRole = 'main-coordinator';
-      else if (dbRole === 'SubCoordinator') frontendRole = 'sub-coordinator';
-      else if (dbRole === 'Lecturer') frontendRole = 'lecturer';
-      else if (dbRole === 'Staff') frontendRole = 'staff';
+      if (dbRole.toLowerCase() === 'main-coordinator') frontendRole = 'main-coordinator';
+      else if (dbRole.toLowerCase() === 'sub-coordinator') frontendRole = 'sub-coordinator';
+      else if (dbRole.toLowerCase() === 'lecturer') frontendRole = 'lecturer';
+      else if (dbRole.toLowerCase() === 'staff') frontendRole = 'staff';
 
       return {
         id: user.userid,
@@ -689,8 +728,7 @@ app.delete('/lecturer/profile/cv', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Access denied. Lecturers only.' });
   }
 
-  const userId = req.user.id;
-
+  const userId = parseInt(req.user.id);
   try {
     // 1. Get current CV path
     const result = await db.query('SELECT cvpath FROM lecturerprofile WHERE lecturerid = $1', [userId]);
@@ -762,8 +800,7 @@ app.post('/lecturer/profile', authenticateToken, async (req, res) => {
   }
 
   const { phone, address, nicNumber, bankDetails, otpCode } = req.body;
-  const userId = req.user.id;
-
+  const userId = parseInt(req.user.id);
   try {
     await db.query('BEGIN');
 
@@ -1113,14 +1150,12 @@ app.get('/', (req, res) => {
   res.send('Lectra API is running');
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// MODULE SCHEDULE (weekly recurring slots → auto-generate sessions)
-// ══════════════════════════════════════════════════════════════════════════════
+// ── MODULE SCHEDULES & SESSIONS ──────────────────────────────────────────
 
 /**
- * Generate/regenerate future sessions for a module from its schedule slots.
- * - Deletes sessions WHERE scheduleddate >= TODAY
- * - Creates one session per week per slot until semesterenddate
+ * Automatically generate/regenerate future sessions for a module from its recurring schedule slots.
+ * This function persists sessions from the current date until the semester end date.
+ * @param {number} moduleId 
  */
 async function generateSessionsForModule(moduleId) {
   const today = new Date();
@@ -1175,7 +1210,7 @@ async function generateSessionsForModule(moduleId) {
   }
 }
 
-// GET /modules/:id/schedule — get all schedule slots
+// GET /modules/:id/schedule - Retrieve recurring slots and term end date for a module
 app.get('/modules/:id/schedule', async (req, res) => {
   const { id } = req.params;
   try {
@@ -1268,7 +1303,9 @@ app.put('/modules/:id/semesterenddate', async (req, res) => {
   }
 });
 
-// Get all modules with assignments
+// ── MODULE CORE ────────────────────────────────────────────────────────────
+
+// GET /modules - Fetch all modules with their assignments and term details
 app.get('/modules', authenticateToken, async (req, res) => {
   try {
     const query = `
@@ -1283,7 +1320,8 @@ app.get('/modules', authenticateToken, async (req, res) => {
         m.reminder_hours,
         m.reminder_template,
         u_sub.name as subcoordinator,
-        u_sub.userid as subcoordinatorid,
+        m.subcoordinatorid as subcoordinatorid,
+        m.subcoordinatorid as sub_coordinator_id,
         (
           SELECT json_agg(json_build_object('id', u_lect.userid, 'name', u_lect.name))
           FROM modulelecturer ml
@@ -1304,11 +1342,9 @@ app.get('/modules', authenticateToken, async (req, res) => {
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// TERM MANAGEMENT
-// ══════════════════════════════════════════════════════════════════════════════
+// ── ACADEMIC TERMS ─────────────────────────────────────────────────────────
 
-// Get all terms
+// GET /terms - List all defined academic terms
 app.get('/terms', authenticateToken, async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM academic_terms ORDER BY academicyear DESC, semester DESC');
@@ -1323,6 +1359,9 @@ app.get('/terms', authenticateToken, async (req, res) => {
 app.post('/terms', authenticateToken, async (req, res) => {
   if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
   const { academicyear, semester, semesterenddate } = req.body;
+  if (semesterenddate && new Date(semesterenddate) < new Date().setHours(0,0,0,0)) {
+    return res.status(400).json({ error: 'Semester end date must be in the future' });
+  }
   try {
     const result = await db.query(
       'INSERT INTO academic_terms (academicyear, semester, semesterenddate) VALUES ($1, $2, $3) RETURNING *',
@@ -1344,6 +1383,9 @@ app.put('/terms/:id', authenticateToken, async (req, res) => {
   if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
   const { id } = req.params;
   const { academicyear, semester, semesterenddate } = req.body;
+  if (semesterenddate && new Date(semesterenddate) < new Date().setHours(0,0,0,0)) {
+    return res.status(400).json({ error: 'Semester end date must be in the future' });
+  }
   try {
     const result = await db.query(
       'UPDATE academic_terms SET academicyear = $1, semester = $2, semesterenddate = $3 WHERE termid = $4 RETURNING *',
@@ -1383,7 +1425,14 @@ app.delete('/terms/:id', authenticateToken, async (req, res) => {
 
 // Create new module
 app.post('/modules', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
+  
   const { moduleCode, moduleName, termId } = req.body;
+  
+  if (!moduleCode || !moduleName || !termId) {
+    return res.status(400).json({ error: 'Module code, module name, and academic term are required' });
+  }
+
   try {
     await db.query(
       'INSERT INTO module_catalog (modulecode, modulename) VALUES ($1, $2) ON CONFLICT (modulecode) DO UPDATE SET modulename = EXCLUDED.modulename',
@@ -1407,7 +1456,10 @@ app.post('/modules', authenticateToken, async (req, res) => {
     res.status(201).json(module);
   } catch (err) {
     console.error('Error creating module:', err);
-    res.status(500).json({ error: 'Server error creating module' });
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'This module is already added for the selected academic term' });
+    }
+    res.status(500).json({ error: 'Server error creating module: ' + err.message });
   }
 });
 
@@ -1458,6 +1510,7 @@ app.put('/modules/:id', authenticateToken, async (req, res) => {
 
 // Assign sub-coordinator to module
 app.patch('/modules/:id/assign-subcoordinator', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
   const { id } = req.params;
   const { subcoordinatorId } = req.body;
   
@@ -1542,18 +1595,21 @@ app.delete('/modules/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get dashboard statistics (Main Coordinator)
-app.get('/dashboard/stats', authenticateToken, async (req, res) => {
+// ── DASHBOARD & STATISTICS ────────────────────────────────────────────────
+
+// GET /stats/main - Aggregate metrics for the Main Coordinator dashboard
+app.get('/stats/main', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
   try {
     const activeLecturersQuery = `
       SELECT COUNT(*) FROM users u
       JOIN roles r ON u.roleid = r.roleid
-      WHERE r.rolename = 'Lecturer'
+      WHERE r.rolename = 'lecturer'
     `;
     const activeSubCoordinatorsQuery = `
       SELECT COUNT(*) FROM users u
       JOIN roles r ON u.roleid = r.roleid
-      WHERE r.rolename = 'SubCoordinator'
+      WHERE r.rolename = 'sub-coordinator'
     `;
     const rescheduledSessionsQuery = `
       SELECT COUNT(*) FROM session
@@ -1572,9 +1628,9 @@ app.get('/dashboard/stats', authenticateToken, async (req, res) => {
         m.subcoordinatorid,
         (SELECT COUNT(*) FROM modulelecturer ml WHERE ml.moduleid = m.moduleid) as lecturer_count
       FROM module m
-      JOIN module_catalog mc ON m.modulecode = mc.modulecode
-      JOIN academic_terms t ON m.termid = t.termid
-      WHERE m.subcoordinatorid IS NULL 
+      LEFT JOIN module_catalog mc ON m.modulecode = mc.modulecode
+      LEFT JOIN academic_terms t ON m.termid = t.termid
+      WHERE (m.subcoordinatorid IS NULL OR m.subcoordinatorid = 0)
          OR NOT EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid)
       ORDER BY m.moduleid DESC
       LIMIT 5
@@ -1604,21 +1660,28 @@ app.get('/dashboard/stats', authenticateToken, async (req, res) => {
   }
 });
 
-// Get dashboard statistics (Sub-Coordinator)
+// GET /subcoordinator/dashboard-stats - Detailed metrics for a sub-coordinator's assigned modules
 app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) => {
   if (req.user.role !== 'sub-coordinator') {
     return res.status(403).json({ error: 'Access denied. Sub-coordinators only.' });
   }
 
-  const userId = req.user.id;
+  const userId = parseInt(req.user.id);
   try {
     // 1. Assigned Modules
     const modulesQuery = `
-      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester
+      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester, m.subcoordinatorid,
+      (
+        SELECT json_agg(json_build_object('id', u_lect.userid, 'name', u_lect.name))
+        FROM modulelecturer ml
+        JOIN users u_lect ON ml.lecturerid = u_lect.userid
+        WHERE ml.moduleid = m.moduleid
+      ) as lecturers
       FROM module m
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
       JOIN academic_terms t ON m.termid = t.termid
-      WHERE subcoordinatorid = $1
+      WHERE m.subcoordinatorid = $1
+         OR EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid AND ml.lecturerid = $2)
     `;
     
     // 2. Upcoming Sessions Count
@@ -1627,7 +1690,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
-      WHERE m.subcoordinatorid = $1 
+      WHERE (m.subcoordinatorid = $1 OR EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid AND ml.lecturerid = $2))
         AND s.datetime >= NOW()
         AND s.status != 'Completed'
     `;
@@ -1638,7 +1701,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
       FROM session s
       JOIN module m ON s.moduleid = m.moduleid
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
-      WHERE m.subcoordinatorid = $1 
+      WHERE (m.subcoordinatorid = $1 OR EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid AND ml.lecturerid = $2))
         AND s.datetime < NOW()
         AND NOT EXISTS (SELECT 1 FROM sessionattendance sa WHERE sa.sessionid = s.sessionid)
     `;
@@ -1664,7 +1727,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
       JOIN academic_terms t ON m.termid = t.termid
       LEFT JOIN users u ON s.lecturerid = u.userid
-      WHERE m.subcoordinatorid = $1 
+      WHERE (m.subcoordinatorid = $1 OR EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid AND ml.lecturerid = $2))
         AND s.datetime >= NOW()
         AND s.status != 'Completed'
       ORDER BY s.datetime ASC
@@ -1672,10 +1735,10 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
     `;
 
     const [modulesRes, upcomingCountRes, missingRes, sessionsRes] = await Promise.all([
-      db.query(modulesQuery, [userId]),
-      db.query(upcomingCountQuery, [userId]),
-      db.query(missingAttendanceQuery, [userId]),
-      db.query(upcomingSessionsQuery, [userId])
+      db.query(modulesQuery, [userId, userId]),
+      db.query(upcomingCountQuery, [userId, userId]),
+      db.query(missingAttendanceQuery, [userId, userId]),
+      db.query(upcomingSessionsQuery, [userId, userId])
     ]);
 
     res.json({
@@ -1692,6 +1755,7 @@ app.get('/subcoordinator/dashboard-stats', authenticateToken, async (req, res) =
 
 // Unassign sub-coordinator from module
 app.patch('/modules/:id/unassign-subcoordinator', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'main-coordinator') return res.status(403).json({ error: 'Access denied' });
   const { id } = req.params;
   try {
     const result = await db.query(
@@ -1886,9 +1950,8 @@ app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
     const { modulename, modulecode } = moduleCheck.rows[0];
 
     const query = `
-      SELECT u.userid, u.name, u.email, lp.phonenumber
+      SELECT u.userid, u.name, u.email, u.phonenumber
       FROM users u
-      LEFT JOIN lecturerprofile lp ON u.userid = lp.lecturerid
       WHERE u.userid = ANY($1::int[])
     `;
     const lecturersRes = await db.query(query, [lecturerIds]);
@@ -1909,7 +1972,7 @@ app.post('/modules/:id/send-message', authenticateToken, async (req, res) => {
       }
       if (lecturer.phonenumber) {
         try {
-            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\nDear ${lecturer.name},\n\n${messageText}\n\n_Lectra VLMS_`;
+            const formattedMessage = `*Message regarding ${modulecode} - ${modulename}*\n\n${messageText}\n\n_Lectra VLMS_`;
             const waSuccess = await whatsappService.sendMessage(lecturer.phonenumber, formattedMessage);
             if (waSuccess) waCount++;
             else errors.push(`WhatsApp to ${lecturer.name} failed (Service error).`);
@@ -2091,23 +2154,30 @@ app.delete('/modules/:id/timetable', authenticateToken, async (req, res) => {
   }
 });
 
-// --- Attendance & Session Details Endpoints ---
+// ── ATTENDANCE & SESSION DETAILS ──────────────────────────────────────────
 
-// Get modules assigned to the logged-in sub-coordinator
+// GET /subcoordinator/modules - List modules assigned/accessible to the sub-coordinator
 app.get('/subcoordinator/modules', authenticateToken, async (req, res) => {
   if (req.user.role !== 'sub-coordinator') {
     return res.status(403).json({ error: 'Access denied. Sub-coordinators only.' });
   }
   try {
     const query = `
-      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester
+      SELECT m.moduleid, m.modulecode, mc.modulename, t.academicyear, t.semester, m.subcoordinatorid,
+      (
+        SELECT json_agg(json_build_object('id', u_lect.userid, 'name', u_lect.name))
+        FROM modulelecturer ml
+        JOIN users u_lect ON ml.lecturerid = u_lect.userid
+        WHERE ml.moduleid = m.moduleid
+      ) as lecturers
       FROM module m
       JOIN module_catalog mc ON m.modulecode = mc.modulecode
       JOIN academic_terms t ON m.termid = t.termid
       WHERE m.subcoordinatorid = $1
+         OR EXISTS (SELECT 1 FROM modulelecturer ml WHERE ml.moduleid = m.moduleid AND ml.lecturerid = $2)
       ORDER BY t.academicyear DESC, t.semester DESC, m.modulecode ASC
     `;
-    const result = await db.query(query, [req.user.id]);
+    const result = await db.query(query, [parseInt(req.user.id), parseInt(req.user.id)]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching sub-coordinator modules:', err);
@@ -2247,8 +2317,9 @@ app.post('/sessions/:id/attendance', authenticateToken, async (req, res) => {
   }
 });
 
-// --- Audit Log Endpoint ---
+// ── AUDIT LOGS ────────────────────────────────────────────────────────────
 
+// GET /audit-log - Retrieve system-wide activity logs
 app.get('/audit-log', authenticateToken, async (req, res) => {
   if (req.user.role !== 'main-coordinator') {
     return res.status(403).json({ error: 'Access denied. Main Coordinator only.' });
@@ -2259,18 +2330,18 @@ app.get('/audit-log', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT 
-        al.logid,
+        al.log_id,
         al.action_type,
         al.target_type,
         al.target_id,
         al.details,
         al.ip_address,
-        al.createdat,
+        al.created_at,
         u.name as user_name,
         u.email as user_email
       FROM audit_log al
       LEFT JOIN users u ON al.user_id = u.userid
-      ORDER BY al.createdat DESC
+      ORDER BY al.created_at DESC
       LIMIT $1
     `;
     const result = await db.query(query, [limit]);
@@ -2281,9 +2352,9 @@ app.get('/audit-log', authenticateToken, async (req, res) => {
   }
 });
 
-// --- Report Endpoints ---
+// ── REPORTS ───────────────────────────────────────────────────────────────
 
-// Get report data for preview
+// GET /reports/data - Fetch raw data for report previews
 app.get('/reports/data', authenticateToken, async (req, res) => {
   const { type, moduleId, lecturerId, startDate, endDate } = req.query;
   const filters = { moduleId, lecturerId, startDate, endDate };
@@ -2420,3 +2491,13 @@ reminderScheduler.start();
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+
+// ── GRACEFUL SHUTDOWN ────────────────────────────────────────────────────────
+const shutdown = async (signal) => {
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  await whatsappService.destroy();
+  process.exit(0);
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

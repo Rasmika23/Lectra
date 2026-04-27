@@ -1,3 +1,8 @@
+/**
+ * @file Card.tsx
+ * @description Reusable surface component with consistent padding, shadow, and border styles.
+ */
+
 import React from 'react';
 
 interface CardProps {

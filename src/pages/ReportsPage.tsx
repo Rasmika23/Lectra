@@ -5,6 +5,7 @@ import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
+import { DatePicker } from '../components/DatePicker';
 import { Download, FileText, Calendar, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import { fetchWithAuth } from '../lib/api';
 
@@ -45,8 +46,19 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
         fetchWithAuth(`${API_BASE_URL}/users`)
       ]);
       
-      const modulesData = await modulesRes.json();
+      let modulesData = await modulesRes.json();
       const usersData = await usersRes.json();
+      
+      // Filter modules for sub-coordinators and lecturers
+      if (currentUser.role !== 'main-coordinator') {
+        const currentUserId = Number(currentUser.userid ?? currentUser.id);
+        modulesData = modulesData.filter((m: any) => {
+          const currentUserId = Number(currentUser.userid ?? currentUser.id);
+          const isCoordinator = m.subcoordinatorid && Number(m.subcoordinatorid) === currentUserId;
+          const isLecturer = (m.lecturers || []).some((l: any) => Number(l.id || l.userid) === currentUserId);
+          return isCoordinator || isLecturer;
+        });
+      }
       
       setModules(modulesData);
       setLecturers(usersData.filter((u: any) => u.role === 'lecturer'));
@@ -259,20 +271,18 @@ export function ReportsPage({ currentUser, onNavigate, onLogout }: ReportsPagePr
                       fullWidth
                     />
                     
-                    <Input
+                    <DatePicker
                       label="Start Date"
-                      type="date"
                       value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
+                      onChange={setStartDate}
                       fullWidth
                       disabled={isDateDisabled}
                     />
                     
-                    <Input
+                    <DatePicker
                       label="End Date"
-                      type="date"
                       value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
+                      onChange={setEndDate}
                       fullWidth
                       disabled={isDateDisabled}
                     />

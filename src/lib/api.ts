@@ -1,4 +1,9 @@
 /**
+ * @file api.ts
+ * @description Centralized utility functions for API requests, including JWT authentication handling.
+ */
+
+/**
  * Returns the Authorization header object with the JWT token from localStorage.
  * Use this in all authenticated fetch() calls.
  */

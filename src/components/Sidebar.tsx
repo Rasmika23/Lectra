@@ -1,3 +1,8 @@
+/**
+ * @file Sidebar.tsx
+ * @description Main navigation sidebar with role-based routing links and animated transitions.
+ */
+
 import React from 'react';
 import {
   LayoutDashboard,

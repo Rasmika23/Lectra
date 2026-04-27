@@ -1,3 +1,9 @@
+/**
+ * @file UserManagementPage.tsx
+ * @description Admin interface for managing system users (Coordinators, Lecturers, Staff).
+ * Supports search, filtering by role, and secure user deletion.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
@@ -24,6 +30,7 @@ interface UserManagementPageProps {
 }
 
 export function UserManagementPage({ currentUser, onNavigate, onLogout }: UserManagementPageProps) {
+    // ── STATE ─────────────────────────────────────────────────────────────────
     const [users, setUsers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRole, setSelectedRole] = useState('All Roles');

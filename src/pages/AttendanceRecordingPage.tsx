@@ -1,3 +1,9 @@
+/**
+ * @file AttendanceRecordingPage.tsx
+ * @description Interface for Sub-Coordinators to record attendance for past sessions.
+ * Allows marking lecturer presence, actual duration, and topics covered.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
@@ -52,6 +58,7 @@ export function AttendanceRecordingPage({
   navigationParams, 
   clearNavigationParams 
 }: AttendanceRecordingPageProps) {
+  // ── STATE ─────────────────────────────────────────────────────────────────
   const [modules, setModules] = useState<Module[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
@@ -225,10 +232,10 @@ export function AttendanceRecordingPage({
         setSessions(data);
       }
 
-      // Hide success message after 5 seconds
+      // Redirect after 2 seconds
       setTimeout(() => {
-        setShowSuccess(false);
-      }, 5000);
+        onNavigate('sub-sessions', { moduleId: selectedModule });
+      }, 2000);
     } catch (err: any) {
       setError(err.message || 'Failed to record attendance');
     } finally {

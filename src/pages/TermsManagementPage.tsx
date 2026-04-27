@@ -9,6 +9,7 @@ import {
   ArrowLeft, Plus, Calendar, Edit2, Trash2, Check, X
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DatePicker } from '../components/DatePicker';
 import { authHeaders } from '../lib/api';
 
 interface Term {
@@ -99,7 +100,17 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
     setEditingTermId(term.termid);
     setEditYear(term.academicyear);
     setEditSemester(term.semester);
-    setEditEndDate(term.semesterenddate ? term.semesterenddate.split('T')[0] : '');
+    
+    // Safely handle date splitting for the edit form
+    let dateStr = '';
+    if (term.semesterenddate) {
+      if (typeof term.semesterenddate === 'string') {
+        dateStr = term.semesterenddate.split('T')[0];
+      } else if (term.semesterenddate instanceof Date) {
+        dateStr = term.semesterenddate.toISOString().split('T')[0];
+      }
+    }
+    setEditEndDate(dateStr);
   };
 
   const handleCancelEdit = () => {
@@ -163,6 +174,8 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
     { value: '2', label: 'Semester 2' }
   ];
 
+  const today = new Date().toISOString().split('T')[0];
+
   return (
     <div ref={scrollRef} className="flex-1 p-[var(--space-xl)] overflow-x-hidden">
       <div className="max-w-4xl mx-auto space-y-[var(--space-xl)]">
@@ -213,18 +226,12 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
                   onChange={(e) => setNewSemester(e.target.value)}
                   required
                 />
-                <div>
-                  <label className="block text-[var(--font-size-small)] font-semibold text-[var(--color-text-primary)] mb-[var(--space-xs)]">
-                    Semester End Date
-                  </label>
-                  <input 
-                    type="date" 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all"
-                    value={newEndDate}
-                    onChange={(e) => setNewEndDate(e.target.value)}
-                    required
-                  />
-                </div>
+                <DatePicker
+                  label="Semester End Date"
+                  value={newEndDate}
+                  onChange={setNewEndDate}
+                  required
+                />
               </div>
               <div className="flex justify-end pt-[var(--space-md)] border-t border-[#E2E8F0]">
                 <Button type="submit" variant="primary" disabled={isSubmitting}>
@@ -292,11 +299,9 @@ export function TermsManagementPage({ currentUser, onNavigate, onLogout }: Terms
                         </td>
                         <td className="p-[var(--space-md)]">
                           {isEditing ? (
-                            <input 
-                              type="date"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
+                            <DatePicker 
                               value={editEndDate}
-                              onChange={(e) => setEditEndDate(e.target.value)}
+                              onChange={setEditEndDate}
                             />
                           ) : (
                             <span className="text-[var(--color-text-secondary)] flex items-center gap-2">

@@ -1,3 +1,10 @@
+/**
+ * @file ModuleManagementPage.tsx
+ * @description Complex page for managing module details, staff assignments (coordinators and lecturers),
+ * recurring schedules, automated session generation, and communication.
+ * Accessible to Main Coordinators and Sub-Coordinators with varying permissions.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config';
 import { useScrollToTop } from '../lib/hooks';
@@ -16,6 +23,8 @@ import sampleTimetable from '../assets/Sample Timetable.xlsx?url';
 import { toast } from 'sonner';
 import { authHeaders } from '../lib/api';
 import { AnalogTimePicker } from '../components/AnalogTimePicker';
+
+// ── TYPES & INTERFACES ───────────────────────────────────────────────────────
 
 interface Lecturer { id: number; name: string; email?: string; wants_reminders?: boolean; cvpath?: string; }
 interface Module {
@@ -50,12 +59,14 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const DURATIONS = ['1', '1.5', '2', '3'];
 
 export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: ModuleManagementPageProps) {
+  // ── STATE - DATA ──────────────────────────────────────────────────────────
   const [modules, setModules] = useState<Module[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [terms, setTerms] = useState<any[]>([]);
 
+  // ── STATE - UI & EDIT ─────────────────────────────────────────────────────
   // Edit Module State
   const [isEditingModule, setIsEditingModule] = useState(false);
   const [editModuleCode, setEditModuleCode] = useState('');
@@ -76,7 +87,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAcademicYear, setSelectedAcademicYear] = useState('All Years');
 
-  // Timetable upload
+  // Assignment states
   const [subcoError, setSubcoError] = useState('');
   const [subcoLoading, setSubcoLoading] = useState(false);
   const [selectedSubcoId, setSelectedSubcoId] = useState('');
@@ -101,8 +112,22 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
   const [editSlot, setEditSlot] = useState<any>({});
 
-  const isMainCoordinator = currentUser.role === 'main-coordinator';
-  const isSubCoordinator = currentUser.role === 'sub-coordinator';
+  // ── PERMISSIONS ───────────────────────────────────────────────────────────
+
+  const userRole = (currentUser?.role || '').toLowerCase();
+  const isMainCoordinator = userRole === 'main-coordinator';
+  const isSubCoordinator = userRole === 'sub-coordinator';
+  
+  const currentUserId = Number(currentUser?.userid ?? currentUser?.id ?? 0);
+  const module = selectedModuleId ? modules.find(m => m.moduleid === selectedModuleId) : null;
+  
+  const subcoId = module?.subcoordinatorid ?? (module as any)?.sub_coordinator_id;
+  
+  const isAssignedSubcoordinator = !!module && (
+      (!!subcoId && Number(subcoId) === currentUserId) ||
+      (module.lecturers || []).some((l: any) => l && Number(l.id || l.userid) === currentUserId)
+  );
+  const canManageModule = isMainCoordinator || (isSubCoordinator && isAssignedSubcoordinator);
 
   const getUserId = (u: SystemUser) => u.userid ?? u.id ?? 0;
 
@@ -112,18 +137,33 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
 
   const selectClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition-all";
 
+  // ── EFFECTS & INITIAL LOAD ────────────────────────────────────────────────
   const fetchData = async () => {
+    // 1. Fetch Modules (Critical)
     try {
-      const [modRes, usersRes, termsRes] = await Promise.all([
-        fetch(`${API}/modules`, { headers: authHeaders() }),
-        fetch(`${API}/users`, { headers: authHeaders() }),
-        fetch(`${API}/terms`, { headers: authHeaders() })
-      ]);
-      if (!modRes.ok || !usersRes.ok) throw new Error('Fetch failed');
-      setModules(await modRes.json());
-      setUsers(await usersRes.json());
-      if (termsRes && termsRes.ok) setTerms(await termsRes.json());
-    } catch (err) { console.error('Failed to fetch data', err); }
+      const res = await fetch(`${API}/modules`, { headers: authHeaders() });
+      if (res.ok) {
+        setModules(await res.json());
+      } else {
+        console.error('Failed to fetch modules:', res.status);
+      }
+    } catch (err) { console.error('Error fetching modules', err); }
+
+    // 2. Fetch Users (Non-Critical)
+    try {
+      const res = await fetch(`${API}/users`, { headers: authHeaders() });
+      if (res.ok) {
+        setUsers(await res.json());
+      }
+    } catch (err) { console.error('Error fetching users', err); }
+
+    // 3. Fetch Terms (Non-Critical)
+    try {
+      const res = await fetch(`${API}/terms`, { headers: authHeaders() });
+      if (res.ok) {
+        setTerms(await res.json());
+      }
+    } catch (err) { console.error('Error fetching terms', err); }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -139,7 +179,6 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     } catch (err) { console.error('Failed to fetch schedule', err); }
   };
 
-  const module = modules.find(m => m.moduleid === selectedModuleId);
   const subCoordinators = users.filter(u => u.role === 'sub-coordinator');
   const allLecturers = users.filter(u => u.role === 'lecturer');
   
@@ -205,6 +244,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     }
   };
 
+  // ── HANDLERS - CORE MODULE ────────────────────────────────────────────────
   const handleEditModuleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedModuleId) return;
@@ -463,7 +503,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
       }
   };
 
-  // ── SCHEDULE HELPERS ───────────────────────────────────────────────────────
+  // ── HANDLERS - SCHEDULE & RECURRING SLOTS ─────────────────────────────────
   const handleAddSlot = async () => {
     if (!semesterEndDate) { toast.error('The Main Coordinator must set a semester end date for this term first'); return; }
     setScheduleLoading(true);
@@ -511,21 +551,23 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     finally { setScheduleLoading(false); }
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MODULE LIST VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── RENDERING - LIST VIEW ─────────────────────────────────────────────────
   if (view === 'list') {
     const filteredModules = modules.filter(m => {
       const matchesSearch = 
-        m.modulename.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.modulecode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.modulename.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (m.subcoordinator || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesYear = selectedAcademicYear === 'All Years' || m.academicyear === selectedAcademicYear;
       
+      const currentUserId = Number(currentUser?.userid ?? currentUser?.id ?? 0);
+      
+      const subcoId = m.subcoordinatorid ?? (m as any).sub_coordinator_id;
+      
       const isAssigned = isMainCoordinator || 
-        m.subcoordinatorid === (currentUser.userid ?? currentUser.id) ||
-        (m.lecturers || []).some(l => l.id === (currentUser.userid ?? currentUser.id));
+        (subcoId && Number(subcoId) === currentUserId) ||
+        (m.lecturers || []).some((l: any) => Number(l.id || l.userid) === currentUserId);
         
       return matchesSearch && matchesYear && isAssigned;
     });
@@ -684,9 +726,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MODULE DETAIL VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── RENDERING - DETAIL VIEW ───────────────────────────────────────────────
   if (!module) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -740,12 +780,14 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
             <div className="flex items-start justify-between gap-3 mb-6">
               <div className="flex items-start gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--color-primary)]">{module.modulecode}</p>
-                    <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module.modulename}</h1>
-                    <p className="text-sm text-[var(--color-text-secondary)]">Academic Year {module.academicyear} · Semester {module.semester}</p>
+                    <p className="text-sm font-semibold text-[var(--color-primary)]">{module?.modulecode || 'N/A'}</p>
+                    <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{module?.modulename || 'Untitled Module'}</h1>
+                    <p className="text-sm text-[var(--color-text-secondary)]">
+                      Academic Year {module?.academicyear || 'Unknown'} · Semester {module?.semester || '?'}
+                    </p>
                   </div>
               </div>
-              {isMainCoordinator && (
+              {canManageModule && (
                   <div className="flex gap-2">
                     <Button 
                         variant="ghost" 
@@ -762,15 +804,17 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                     >
                         Edit
                     </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        icon={<Trash2 className="w-4 h-4" />} 
-                        onClick={() => handleDeleteModule()}
-                        className="text-red-500 hover:bg-red-50 hover:text-red-700 font-medium"
-                    >
-                        Delete
-                    </Button>
+                    {isMainCoordinator && (
+                      <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          icon={<Trash2 className="w-4 h-4" />} 
+                          onClick={() => handleDeleteModule()}
+                          className="text-red-500 hover:bg-red-50 hover:text-red-700 font-medium"
+                      >
+                          Delete
+                      </Button>
+                    )}
                   </div>
               )}
             </div>
@@ -827,8 +871,10 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
               <h2 className="font-bold text-[var(--color-text-primary)]">Sub-Coordinator</h2>
             </div>
             <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm">{module.subcoordinator.charAt(0).toUpperCase()}</div>
-              <p className="font-semibold text-[var(--color-text-primary)]">{module.subcoordinator}</p>
+              <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                {(module?.subcoordinator || '?').charAt(0).toUpperCase()}
+              </div>
+              <p className="font-semibold text-[var(--color-text-primary)]">{module?.subcoordinator || 'Assigned Coordinator'}</p>
             </div>
           </Card>
         )}
@@ -861,7 +907,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                         </label>
                     )}
 
-                    {isMainCoordinator && (
+                    {canManageModule && (
                       <Button variant="ghost" size="sm" icon={<X className="w-3.5 h-3.5" />} onClick={() => handleRemoveLecturer(lec.id)} className="text-red-500 hover:bg-red-50 hover:text-red-700">Remove</Button>
                     )}
                     
@@ -880,7 +926,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
           ) : (
             <p className="text-sm text-gray-400 italic mb-4">No lecturers assigned</p>
           )}
-          {isMainCoordinator && (
+          {canManageModule && (
             availableLecturers.length > 0 ? (
               <div className="border-t pt-4">
                   <div className="flex gap-2">
@@ -981,7 +1027,7 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
                     </div>
 
                     {/* Actions Column */}
-                    {isSubCoordinator && (
+                    {canManageModule && (
                       <div className="flex items-center gap-2 md:pl-4">
                         <Button 
                           variant="ghost" 
@@ -1010,8 +1056,8 @@ export function ModuleManagementPage({ currentUser, onNavigate, onLogout }: Modu
             ))}
           </div>
 
-          {/* Add Slot (sub-coordinator only) */}
-          {isSubCoordinator && (
+          {/* Add Slot */}
+          {canManageModule && (
             <div className="mt-12">
               {addingSlot ? (
                 <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 shadow-inner">

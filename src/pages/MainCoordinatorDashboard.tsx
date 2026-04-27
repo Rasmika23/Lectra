@@ -1,3 +1,9 @@
+/**
+ * @file MainCoordinatorDashboard.tsx
+ * @description Central dashboard for Main Coordinators.
+ * Displays system-wide statistics, recent activity (audit logs), and modules requiring attention.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import { Card } from '../components/Card';
@@ -14,6 +20,7 @@ interface MainCoordinatorDashboardProps {
 }
 
 export function MainCoordinatorDashboard({ currentUser, onNavigate, onLogout }: MainCoordinatorDashboardProps) {
+  // ── STATE ─────────────────────────────────────────────────────────────────
   const [stats, setStats] = useState({
     activeLecturers: 0,
     activeSubCoordinators: 0,
