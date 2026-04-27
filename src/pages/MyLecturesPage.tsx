@@ -317,6 +317,7 @@ export function MyLecturesPage({ currentUser, onNavigate, onLogout }: MyLectures
         { value: '1', label: '1 hour' },
         { value: '1.5', label: '1.5 hours' },
         { value: '2', label: '2 hours' },
+        { value: '2.5', label: '2.5 hours' },
         { value: '3', label: '3 hours' },
     ];
 
